@@ -51,6 +51,7 @@ run `cargo ra-jit stop` first if one is running.
 | `RA_JIT_CACHE` | the store's directory | not set: no store |
 | `RA_JIT_CACHE_MAX` | the most the sealed packs may take: bytes, or a number with `K`, `M` or `G`, or `off` | 8G |
 | `RA_JIT_CACHE_SEAL_AT` | size at which an open pack is sealed at the end of a build; exists for the harnesses | 4M |
+| `RA_JIT_HYDRATE` | `0` compiles the checkout's own functions in the first build instead of taking them from the store (dependencies still come from it), so the first edit can be spliced rather than rewrite the whole object and restart the program | take them from the store |
 
 ### What is on disk
 

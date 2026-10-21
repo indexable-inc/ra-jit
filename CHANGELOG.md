@@ -8,6 +8,9 @@ All notable changes to ra-jit are written here. The format follows
 
 ### Added
 
+- `RA_JIT_HYDRATE=0` ([docs/cache.md](docs/cache.md)): with a store, the first build compiles the
+  checkout's own functions instead of taking them from it, so the first edit of a new daemon
+  is spliced, not a full rewrite that restarts the program. Default unchanged.
 - `#[ra_jit::cache]` ([#17](https://github.com/indexable-inc/ra-jit/issues/17)): the
   `ra-jit-cache` crate's attribute keeps what a pure function returns, in memory and under
   `target/ra-jit/fn-cache`, by its arguments and a hash of the code ra-jit compiled for it and

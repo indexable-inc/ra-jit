@@ -522,8 +522,11 @@ impl CodegenUnit {
         let all = || roots.entries.iter().chain(roots.on_demand).copied();
         let mut declined = None;
         // Code of the checkout comes from the store in the first build alone: what a patch is
-        // of has to be compiled here, to tell what an edit changes.
-        let hydrate = known.base.is_none();
+        // of has to be compiled here, to tell what an edit changes. That makes the first edit a
+        // full build, which a program running the first build has to be started again for;
+        // RA_JIT_HYDRATE=0 compiles the checkout's code in the first build instead.
+        let hydrate =
+            known.base.is_none() && std::env::var_os("RA_JIT_HYDRATE").is_none_or(|it| it != "0");
         if let Some(base) = known.base.take().filter(|it| !it.outdated()) {
             let start = stdx::time::Instant::now();
             let own_statics = OwnStatics::new(
