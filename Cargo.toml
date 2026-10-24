@@ -2,7 +2,7 @@
 members = ["crates/ra-jit", "crates/hir-ty-codegen", "crates/ra-jit-store", "crates/ra-jit-expand", "crates/ra-jit-fuzz", "crates/ra-jit-live", "crates/ra-jit-bench", "crates/ra-jit-cache", "crates/ra-jit-cache-macros", "vendor/rust-analyzer/lib/rowan"]
 # `ra-jit-wasm` turns on a feature of `hir-ty-codegen` that swaps the code generator's output, which
 # must not be unified into a build of the native crates.
-exclude = ["crates/ra-jit-wasm", "demo", "harness"]
+exclude = ["crates/ra-jit-wasm", "demo", "harness", "vendor/proc-macro-srv"]
 resolver = "2"
 
 [workspace.package]

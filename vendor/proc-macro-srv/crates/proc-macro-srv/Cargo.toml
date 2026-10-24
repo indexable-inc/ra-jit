@@ -1,0 +1,33 @@
+[package]
+name = "proc-macro-srv"
+version = "0.0.0"
+repository.workspace = true
+description = "Proc-macro server for rust-analyzer."
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+doctest = false
+
+[dependencies]
+temp-dir.workspace = true
+
+paths.workspace = true
+# span = {workspace = true, default-features = false} does not work
+span = { path = "../span", version = "0.0.0", default-features = false}
+intern.workspace = true
+rustc_lexer.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[features]
+default = []
+in-rust-tree = []
+
+[lints]
+workspace = true
+

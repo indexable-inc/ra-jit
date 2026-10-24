@@ -8,6 +8,13 @@ All notable changes to ra-jit are written here. The format follows
 
 ### Added
 
+- `vendor/proc-macro-srv`, the 1.99.0 release's proc-macro server with a loader that reads
+  the list of macros ra-jit writes into a proc-macro library, built by ra-jit with nothing of
+  rustc's. `RA_JIT_PROC_MACRO_COMPARE` and `RA_JIT_PROC_MACRO_LIBS` expand each call again
+  with it and ra-jit's library of the crate and compare the output with the toolchain's;
+  `harness/macroserver.py` holds serde_derive's, thiserror's, tokio's and clap's equal
+  ([no-rustc.md](docs/no-rustc.md), step J1). A proc-macro crate's `fn main` is no longer
+  taken for an entry point.
 - The SSE and AVX compares compile (#87): `llvm.x86.sse.cmp.ps` and `.ss`, `sse2.cmp.pd` and
   `.sd` and AVX's 256-bit ones give a lane of all ones where the immediate's predicate holds, as
   rustc's do. glam's `Vec4::cmpeq` and `is_finite_mask`, which bevy calls, were left to rustc;

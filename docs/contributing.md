@@ -34,6 +34,8 @@ you send them, including fixes you find here and want to upstream.
     vendor/rust-analyzer/lib/rowan/
                               rowan 0.17.0 with a flat kind of tree behind its cursor (flat-syntax.md)
     vendor/rustc_abi/         rustc's layout crate, copied from the 1.99.0 tag, a git subtree
+    vendor/proc-macro-srv/    the 1.99.0 release's proc-macro server, built by ra-jit to load
+                              the proc-macro libraries ra-jit links (no-rustc.md, step J1)
     vendor/subtree.py         moves vendor/ changes to the forks, and the forks and upstream into vendor/
     vendor/source.rev         the commit of the old development branch this tree last took from
 

@@ -27,6 +27,10 @@
 //!
 //! The store's own key adds the build of ra-jit and the toolchain, whose proc-macro server
 //! expands.
+//!
+//! [`compare`] holds the toolchain's server against ra-jit's, and keeps nothing while it does.
+
+mod compare;
 
 use std::{
     any::Any,
@@ -67,6 +71,7 @@ enum Mode {
 struct Config {
     mode: Mode,
     skip: Vec<Box<str>>,
+    compare: bool,
 }
 
 fn config() -> &'static Config {
@@ -80,7 +85,8 @@ fn config() -> &'static Config {
         };
         let skip = std::env::var("RA_JIT_PROC_MACRO_CACHE_SKIP").unwrap_or_default();
         let skip = skip.split(',').map(str::trim).filter(|it| !it.is_empty()).map(Into::into);
-        Config { mode, skip: skip.collect() }
+        let compare = std::env::var_os("RA_JIT_PROC_MACRO_COMPARE").is_some();
+        Config { mode, skip: skip.collect(), compare }
     })
 }
 
@@ -99,7 +105,8 @@ fn wrap(
         Mode::Off => true,
         Mode::On => kind == ProcMacroKind::Bang,
         Mode::All | Mode::Check => false,
-    } || config().skip.iter().any(|it| **it == *name);
+    } || config().compare
+        || config().skip.iter().any(|it| **it == *name);
     Arc::new(Kept { inner, dylib: Dylib::at(dylib), name: name.into(), kind, skipped })
 }
 
@@ -266,6 +273,18 @@ impl ProcMacroExpander for Kept {
         mixed_site: Span,
         current_dir: String,
     ) -> Result<tt::TopSubtree, ProcMacroExpansionError> {
+        if compare::comparing() {
+            return self.inner.expand(
+                db,
+                subtree,
+                attrs,
+                env,
+                def_site,
+                call_site,
+                mixed_site,
+                current_dir,
+            );
+        }
         let start = Instant::now();
         let mode = config().mode;
         let store = (!self.skipped).then(store).flatten();
@@ -295,10 +314,26 @@ impl ProcMacroExpander for Kept {
             def_site,
             call_site,
             mixed_site,
-            current_dir,
+            current_dir.clone(),
         );
         COUNTS.expanded.add(expand.elapsed());
         COUNTS.kinds[kind_index(self.kind)].add(expand.elapsed());
+        if config().compare {
+            compare::again(
+                &self.dylib.path,
+                &self.name,
+                self.kind,
+                db,
+                subtree,
+                attrs,
+                env,
+                def_site,
+                call_site,
+                mixed_site,
+                &current_dir,
+                &expanded,
+            );
+        }
         let (Some(store), Some(call), Ok(output)) = (store, &call, &expanded) else {
             if expanded.is_err() {
                 COUNTS.failed.add(Duration::ZERO);
@@ -425,6 +460,9 @@ pub fn report() -> Option<String> {
         if calls != 0 {
             said += &format!("; {calls} {what}");
         }
+    }
+    if let Some(compared) = compare::report() {
+        said += &format!("; {compared}");
     }
     Some(said)
 }

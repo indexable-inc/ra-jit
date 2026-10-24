@@ -880,8 +880,25 @@ Where J stands (2026-10-24):
   proc-macro function out of its crate's value namespace, so `crate::derive_fn` did not
   resolve; it is a function in its crate now, and a path from another crate sees only the
   macros.
-- Next: the release's server with a loader that reads the list and calls each `Client` over
-  the bridge, checked against the toolchain's server as above.
+- The release's server is `vendor/proc-macro-srv`: rust-lang/rust's `src/tools/rust-analyzer`
+  crates the release's `rust-analyzer-proc-macro-srv` is built from, and `compiler/rustc_lexer`,
+  at 1.99.0, with the release's `Cargo.lock`. What rustc's tree gave it is replaced, as its
+  manifest's header lists: the loader `dlopen`s a library and reads ra-jit's list where the
+  release reads rustc's metadata, `rustc_proc_macro` is the standard library's `proc_macro`,
+  `rustc_lexer` is the vendored crate, and the version string and the commit are written down
+  where build scripts ran rustc and git. ra-jit builds it with nothing of rustc's (`--exe`),
+  over rustc's `serde_derive` and the toolchain's server, the bootstrap above.
+- `RA_JIT_PROC_MACRO_COMPARE` (`crates/ra-jit-expand/src/compare.rs`) names that server, and
+  `RA_JIT_PROC_MACRO_LIBS` a directory of ra-jit's libraries: each call the toolchain's server
+  expands with rustc's library is expanded again by ra-jit's server with ra-jit's library of
+  the crate, and the outputs, spans included, are compared. `harness/macroserver.py` builds
+  the server and the libraries of serde_derive, thiserror-impl, tokio-macros and clap_derive,
+  and holds every call of a package of derives with helper attributes, attributes and
+  function-like macros equal (on dev-aws-11: the server linked in 10.6 s, each library in
+  11-14 s). A proc-macro crate has no entry point: rust-analyzer took tokio's
+  `#[proc_macro_attribute] pub fn main` for one.
+- Next: ra-jit's server and libraries where every crate that expands with them is ra-jit's,
+  in place of a rustc build of the macro crates.
 
 **K. The cold build is ra-jit's.** ([#91](https://github.com/indexable-inc/ra-jit/issues/91)) `cargo ra-jit build` with nothing built plans the units
 (plan.rs), and the daemon compiles them all, taking what the store and the remote have, links

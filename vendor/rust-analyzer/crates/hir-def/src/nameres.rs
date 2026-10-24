@@ -706,6 +706,11 @@ impl DefMap {
         self.data.no_std || self.data.no_core
     }
 
+    /// Whether this is a crate of procedural macros (`proc-macro = true`).
+    pub fn is_proc_macro(&self) -> bool {
+        self.data.proc_macro
+    }
+
     pub fn is_no_core(&self) -> bool {
         self.data.no_core
     }

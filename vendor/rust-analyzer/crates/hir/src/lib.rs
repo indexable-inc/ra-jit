@@ -1752,13 +1752,16 @@ impl Function {
         self.attrs(db).contains(AttrFlags::IS_TEST)
     }
 
-    /// is this a `fn main` or a function with an `export_name` of `main`?
+    /// is this a `fn main` or a function with an `export_name` of `main`? A crate of
+    /// procedural macros has no entry point: its `fn main` is a function as any other (tokio's
+    /// `#[proc_macro_attribute] pub fn main`).
     pub fn is_main(self, db: &dyn HirDatabase) -> bool {
         match self.id {
             AnyFunctionId::FunctionId(id) => {
                 self.exported_main(db)
                     || self.module(db).is_crate_root(db)
                         && FunctionSignature::of(db, id).name == sym::main
+                        && !crate_def_map(db, HasModule::krate(&id, db)).is_proc_macro()
             }
             AnyFunctionId::BuiltinDeriveImplMethod { .. } => false,
         }

@@ -1,8 +1,8 @@
 {
  "dir": ".",
  "inputs": {
-  "Cargo.lock": "c671521f9f52cfcbc4a9a692c74ee7dde971dcf18409d596ee32db1f2f6e192f",
-  "Cargo.toml": "4f71340b2d7f3f874e690331931f61541000600a05e19974a81ba3f0c8c74ef5"
+  "Cargo.lock": "db6bb7e2828be1c397e663c8c774981c404e67479fa5ee1e2ca23176caf37c08",
+  "Cargo.toml": "e87399a1affd2eed8be10f9c4fd6786d0cf30ed62b16e08a1d240c90a09c298c"
  },
  "packages": {
   "adler2@2.0.1": {
@@ -15115,6 +15115,7 @@
       "http1",
       "http2",
       "native-tokio",
+      "ring",
       "rustls-native-certs",
       "tls12"
      ],
@@ -19263,6 +19264,22 @@
        "name": "hir_ty_codegen"
       },
       {
+       "i": 165,
+       "name": "http_body_util"
+      },
+      {
+       "i": 170,
+       "name": "hyper"
+      },
+      {
+       "i": 171,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 172,
+       "name": "hyper_util"
+      },
+      {
        "i": 184,
        "name": "ide_db"
       },
@@ -19510,6 +19527,22 @@
       {
        "i": 158,
        "name": "hir_ty_codegen"
+      },
+      {
+       "i": 165,
+       "name": "http_body_util"
+      },
+      {
+       "i": 170,
+       "name": "hyper"
+      },
+      {
+       "i": 171,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 172,
+       "name": "hyper_util"
       },
       {
        "i": 184,
@@ -19761,6 +19794,22 @@
        "name": "hir_ty_codegen"
       },
       {
+       "i": 165,
+       "name": "http_body_util"
+      },
+      {
+       "i": 170,
+       "name": "hyper"
+      },
+      {
+       "i": 171,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 172,
+       "name": "hyper_util"
+      },
+      {
        "i": 184,
        "name": "ide_db"
       },
@@ -20008,6 +20057,22 @@
       {
        "i": 158,
        "name": "hir_ty_codegen"
+      },
+      {
+       "i": 165,
+       "name": "http_body_util"
+      },
+      {
+       "i": 170,
+       "name": "hyper"
+      },
+      {
+       "i": 171,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 172,
+       "name": "hyper_util"
       },
       {
        "i": 184,
@@ -32294,6 +32359,7 @@
       "http1",
       "http2",
       "native-tokio",
+      "ring",
       "rustls-native-certs",
       "tls12"
      ],
@@ -36614,6 +36680,22 @@
        "name": "hir_ty_codegen"
       },
       {
+       "i": 162,
+       "name": "http_body_util"
+      },
+      {
+       "i": 167,
+       "name": "hyper"
+      },
+      {
+       "i": 168,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 169,
+       "name": "hyper_util"
+      },
+      {
        "i": 181,
        "name": "ide_db"
       },
@@ -36861,6 +36943,22 @@
       {
        "i": 155,
        "name": "hir_ty_codegen"
+      },
+      {
+       "i": 162,
+       "name": "http_body_util"
+      },
+      {
+       "i": 167,
+       "name": "hyper"
+      },
+      {
+       "i": 168,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 169,
+       "name": "hyper_util"
       },
       {
        "i": 181,
@@ -37112,6 +37210,22 @@
        "name": "hir_ty_codegen"
       },
       {
+       "i": 162,
+       "name": "http_body_util"
+      },
+      {
+       "i": 167,
+       "name": "hyper"
+      },
+      {
+       "i": 168,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 169,
+       "name": "hyper_util"
+      },
+      {
        "i": 181,
        "name": "ide_db"
       },
@@ -37359,6 +37473,22 @@
       {
        "i": 155,
        "name": "hir_ty_codegen"
+      },
+      {
+       "i": 162,
+       "name": "http_body_util"
+      },
+      {
+       "i": 167,
+       "name": "hyper"
+      },
+      {
+       "i": 168,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 169,
+       "name": "hyper_util"
       },
       {
        "i": 181,
@@ -49677,6 +49807,7 @@
       "http1",
       "http2",
       "native-tokio",
+      "ring",
       "rustls-native-certs",
       "tls12"
      ],
@@ -53825,6 +53956,22 @@
        "name": "hir_ty_codegen"
       },
       {
+       "i": 166,
+       "name": "http_body_util"
+      },
+      {
+       "i": 171,
+       "name": "hyper"
+      },
+      {
+       "i": 172,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 173,
+       "name": "hyper_util"
+      },
+      {
        "i": 185,
        "name": "ide_db"
       },
@@ -54072,6 +54219,22 @@
       {
        "i": 159,
        "name": "hir_ty_codegen"
+      },
+      {
+       "i": 166,
+       "name": "http_body_util"
+      },
+      {
+       "i": 171,
+       "name": "hyper"
+      },
+      {
+       "i": 172,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 173,
+       "name": "hyper_util"
       },
       {
        "i": 185,
@@ -54323,6 +54486,22 @@
        "name": "hir_ty_codegen"
       },
       {
+       "i": 166,
+       "name": "http_body_util"
+      },
+      {
+       "i": 171,
+       "name": "hyper"
+      },
+      {
+       "i": 172,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 173,
+       "name": "hyper_util"
+      },
+      {
        "i": 185,
        "name": "ide_db"
       },
@@ -54570,6 +54749,22 @@
       {
        "i": 159,
        "name": "hir_ty_codegen"
+      },
+      {
+       "i": 166,
+       "name": "http_body_util"
+      },
+      {
+       "i": 171,
+       "name": "hyper"
+      },
+      {
+       "i": 172,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 173,
+       "name": "hyper_util"
       },
       {
        "i": 185,
@@ -66883,6 +67078,7 @@
       "http1",
       "http2",
       "native-tokio",
+      "ring",
       "rustls-native-certs",
       "tls12"
      ],
@@ -71203,6 +71399,22 @@
        "name": "hir_ty_codegen"
       },
       {
+       "i": 163,
+       "name": "http_body_util"
+      },
+      {
+       "i": 168,
+       "name": "hyper"
+      },
+      {
+       "i": 169,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 170,
+       "name": "hyper_util"
+      },
+      {
        "i": 182,
        "name": "ide_db"
       },
@@ -71450,6 +71662,22 @@
       {
        "i": 156,
        "name": "hir_ty_codegen"
+      },
+      {
+       "i": 163,
+       "name": "http_body_util"
+      },
+      {
+       "i": 168,
+       "name": "hyper"
+      },
+      {
+       "i": 169,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 170,
+       "name": "hyper_util"
       },
       {
        "i": 182,
@@ -71701,6 +71929,22 @@
        "name": "hir_ty_codegen"
       },
       {
+       "i": 163,
+       "name": "http_body_util"
+      },
+      {
+       "i": 168,
+       "name": "hyper"
+      },
+      {
+       "i": 169,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 170,
+       "name": "hyper_util"
+      },
+      {
        "i": 182,
        "name": "ide_db"
       },
@@ -71948,6 +72192,22 @@
       {
        "i": 156,
        "name": "hir_ty_codegen"
+      },
+      {
+       "i": 163,
+       "name": "http_body_util"
+      },
+      {
+       "i": 168,
+       "name": "hyper"
+      },
+      {
+       "i": 169,
+       "name": "hyper_rustls"
+      },
+      {
+       "i": 170,
+       "name": "hyper_util"
       },
       {
        "i": 182,
