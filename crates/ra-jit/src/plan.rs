@@ -33,6 +33,12 @@ pub(crate) struct Selection {
     pub(crate) packages: Vec<String>,
     /// Whether every member of the workspace is built.
     pub(crate) workspace: bool,
+    /// The members `--exclude` leaves out of the workspace.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) excludes: Vec<String>,
+    /// The values of `-Z`, which cargo is run with as it was.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) unstable: Vec<String>,
     /// The triple built for, when it is not the host.
     pub(crate) target: Option<String>,
     /// Whether tests, examples and benchmarks are built, and so what they depend on.
@@ -57,6 +63,8 @@ impl Default for Selection {
             all_features: false,
             packages: Vec::new(),
             workspace: false,
+            excludes: Vec::new(),
+            unstable: Vec::new(),
             target: None,
             dev_deps: false,
             config: Vec::new(),
@@ -87,6 +95,12 @@ impl Selection {
         }
         if self.workspace {
             flags.push("--workspace".to_owned());
+        }
+        for package in &self.excludes {
+            flags.extend(["--exclude".to_owned(), package.clone()]);
+        }
+        for unstable in &self.unstable {
+            flags.extend(["-Z".to_owned(), unstable.clone()]);
         }
         for config in &self.config {
             flags.extend(["--config".to_owned(), config.clone()]);

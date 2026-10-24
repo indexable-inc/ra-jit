@@ -321,7 +321,18 @@ impl<'db> InferenceContext<'db> {
         is_read: ExprIsRead,
     ) -> Ty<'db> {
         self.db.unwind_if_revision_cancelled();
+        // An expression is inferred within the one it is in: rustc's 5,204-arm `else if`.
+        crate::next_solver::ensure_sufficient_stack(|| {
+            self.infer_expr_inner_here(tgt_expr, expected, is_read)
+        })
+    }
 
+    fn infer_expr_inner_here(
+        &mut self,
+        tgt_expr: ExprId,
+        expected: &Expectation<'db>,
+        is_read: ExprIsRead,
+    ) -> Ty<'db> {
         let expr = &self.store[tgt_expr];
         tracing::trace!(?expr);
         let ty = match expr {

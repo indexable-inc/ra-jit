@@ -326,7 +326,7 @@ fn cast(x: *mut TraitObject) {
     fn enum_to_numeric_cast() {
         check_diagnostics(
             r#"
-//- minicore: sized
+//- minicore: sized, copy
 pub enum UnitOnly {
     Foo,
     Bar,
@@ -488,7 +488,7 @@ fn foo<T: ?Sized>() {
     fn ptr_to_ptr_different_regions() {
         check_diagnostics(
             r#"
-//- minicore: sized
+//- minicore: sized, copy
 struct Foo<'a> { a: &'a () }
 
 fn extend_lifetime_very_very_safely<'a>(v: *const Foo<'a>) -> *const Foo<'static> {
@@ -500,6 +500,7 @@ trait Trait {}
 
 fn assert_static<'a>(ptr: *mut (dyn Trait + 'a)) -> *mut (dyn Trait + 'static) {
     ptr as _
+  //^^^^^^^^ error: lifetime may not live long enough
 }
 
 fn main() {
@@ -552,7 +553,7 @@ fn main() {
     fn ptr_to_trait_obj_ok() {
         check_diagnostics(
             r#"
-//- minicore: pointee, send, sync
+//- minicore: pointee, send, sync, copy
 trait Trait<'a> {}
 
 fn remove_auto<'a>(x: *mut (dyn Trait<'a> + Send)) -> *mut dyn Trait<'a> {
@@ -561,10 +562,12 @@ fn remove_auto<'a>(x: *mut (dyn Trait<'a> + Send)) -> *mut dyn Trait<'a> {
 
 fn cast_inherent_lt<'a, 'b>(x: *mut (dyn Trait<'static> + 'a)) -> *mut (dyn Trait<'static> + 'b) {
     x as _
+  //^^^^^^ error: lifetime may not live long enough
 }
 
 fn unprincipled<'a, 'b>(x: *mut (dyn Send + 'a)) -> *mut (dyn Sync + 'b) {
     x as _
+  //^^^^^^ error: lifetime may not live long enough
 }
 "#,
         );
@@ -597,7 +600,7 @@ fn cast(ptr: *const dyn Sub) -> *const Wrapper<dyn Super> {
     fn supported_cast() {
         check_diagnostics(
             r#"
-//- minicore: sized
+//- minicore: sized, copy
 pub fn main() {
     struct String;
 

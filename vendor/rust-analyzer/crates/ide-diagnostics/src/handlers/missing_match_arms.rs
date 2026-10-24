@@ -770,6 +770,7 @@ fn main() {
 
         check_diagnostics(
             r#"
+//- minicore: copy
 struct S { a: char}
 fn main(v: S) {
     match v { S{ a }      => { _ = a; } }
@@ -1052,7 +1053,7 @@ fn f() {
     fn min_exhaustive() {
         check_diagnostics(
             r#"
-//- minicore: result
+//- minicore: result, copy
 fn test(x: Result<i32, !>) {
     match x {
         Ok(_y) => {}
@@ -1062,7 +1063,7 @@ fn test(x: Result<i32, !>) {
         );
         check_diagnostics(
             r#"
-//- minicore: result
+//- minicore: result, copy
 fn test(ptr: *const Result<i32, !>) {
     unsafe {
         match *ptr {
@@ -1075,7 +1076,7 @@ fn test(ptr: *const Result<i32, !>) {
         );
         check_diagnostics(
             r#"
-//- minicore: result
+//- minicore: result, copy
 fn test(x: Result<i32, &'static !>) {
     match x {
         //^ error: missing match arm: `Err(_)` not covered

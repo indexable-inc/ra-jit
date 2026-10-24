@@ -299,7 +299,9 @@ takes about ten minutes. On Linux x86-64, Linux AArch64 and macOS arm64 it:
 - on Linux x86-64, runs rustc's borrow-check tests with a floor under the passes, and the
   run-pass tests of `harness/ui-pinned.txt`, against that build.
 
-`fork alone` builds and tests `vendor/rust-analyzer` outside this repository, and the `fmt`
+`fork alone` builds and tests `vendor/rust-analyzer` outside this repository (the tests of
+`hir-ty`, `hir-ty-borrowck`, `hir-ty-wfcheck` and `ide-diagnostics`, whose diagnostics are the
+daemon's errors; ide-diagnostics adds about 15 s), and the `fmt`
 job checks formatting and has `harness/imports.py` import every script of the harness, so one
 that only a seldom tier or a person runs can't break unnoticed. It also runs
 `harness/rustcsites.py`, which fails when ra-jit's code gains a place that starts rustc, rustdoc

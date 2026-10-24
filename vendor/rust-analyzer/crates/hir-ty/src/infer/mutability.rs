@@ -18,7 +18,14 @@ impl<'db> InferenceContext<'db> {
         self.infer_mut_expr(body_expr, Mutability::Not);
     }
 
-    fn infer_mut_expr(&mut self, tgt_expr: ExprId, mut mutability: Mutability) {
+    fn infer_mut_expr(&mut self, tgt_expr: ExprId, mutability: Mutability) {
+        // An expression is walked within the one it is in: rustc's 5,204-arm `else if`.
+        crate::next_solver::ensure_sufficient_stack(|| {
+            self.infer_mut_expr_here(tgt_expr, mutability)
+        })
+    }
+
+    fn infer_mut_expr_here(&mut self, tgt_expr: ExprId, mut mutability: Mutability) {
         if let Some(adjustments) = self.result.expr_adjustments.get_mut(&tgt_expr) {
             let mut adjustments = adjustments.iter_mut().rev().peekable();
             while let Some(adj) = adjustments.next() {

@@ -50,7 +50,15 @@ programs of the build with the same flags, when it has that build loaded: the er
 would fail with, or `Finished`, and no rustc. Any other check is the daemon's too: it loads
 the workspace as a build of those flags would, builds nothing, and says what it finds in every
 file of the workspace's crates. The build scripts and proc macros are the ones cargo built
-before; a workspace that never had them built has rustc build them first. `status` prints what the daemon holds, and for every workspace how many builds
+before; a workspace that never had them built has rustc build them first. A check takes
+`--message-format` (each of cargo's values), `-Z`, `--exclude` and several `--target`s, a
+check for each; in JSON its errors are rustc's `compiler-message`s, with their spans,
+`rendered` and the failure notes, then `build-finished`, which is what rust-analyzer's
+check-on-save and other editors read, so they show the daemon's verdict. What only rustc writes
+is not there: the labels and the help and notes of an error, its other spans, and
+`code.explanation`; the message is rust-analyzer's, worded otherwise than rustc's. E0061's
+span is where the missing argument goes, not the function called. `harness/check_json.py`
+compares it with `cargo check` on the same errors. `status` prints what the daemon holds, and for every workspace how many builds
 the daemon served and how many went to cargo, with the reasons. `stop` ends the daemon. Any
 other subcommand is passed to cargo as typed.
 
@@ -136,10 +144,11 @@ is. It prints one line with the reason, `ra-jit: <reason>; building with cargo`,
 it in `cargo ra-jit status`. The build then behaves as cargo's because it is cargo's.
 
 A whole invocation goes to cargo when any of these hold (`Invocation::only_cargo` in
-`cargo/cli.rs`):
+`cargo/cli.rs`); for `check` only `--build-plan` and `--unit-graph` do:
 
 | Condition | Reason printed |
 |---|---|
+| `--build-plan` or `--unit-graph` | `--build-plan and --unit-graph are cargo's to answer` |
 | `--message-format` | `--message-format` is cargo's to answer |
 | a `-Z` flag | unstable cargo flags |
 | `--exclude` | `--exclude` is not loaded by the daemon yet |

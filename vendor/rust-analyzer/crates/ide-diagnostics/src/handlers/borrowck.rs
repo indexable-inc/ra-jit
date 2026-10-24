@@ -137,6 +137,128 @@ fn main() {
     }
 
     #[test]
+    fn destructuring_assignment_moves_what_it_takes() {
+        check_diagnostics(
+            r#"
+//- minicore: copy
+struct NC;
+struct S { a: u8, b: NC }
+union U { field: u8 }
+fn copies(r: &S, u: &U, mut a: u8, mut field: u8) {
+    S { a, .. } = *r;
+    S { a: _, .. } = *r;
+    unsafe { U { field } = *u };
+    let _ = (a, field);
+}
+fn moves(r: &S, mut b: NC) {
+    S { b, .. } = *r;
+                //^^ error: cannot move out of `r.b` which is behind a shared reference
+    let _ = b;
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn a_body_with_an_error_is_not_borrow_checked() {
+        check_diagnostics(
+            r#"
+//- minicore: copy
+struct NC;
+fn tainted(x: NC) -> u32 {
+    let _y = x;
+    let _z = x;
+    NC as u32
+  //^^^^^^^^^ error: non-primitive cast: `NC` as `u32`
+}
+"#,
+        );
+    }
+
+    // rustc's tests/ui/expr/if/expr-stack-overflow.rs: each expression's syntax was found by
+    // walking down from the body's root, quadratic in the chain, and lowering it recursed
+    // past the stack.
+    #[test]
+    fn a_5204_arm_else_if_chain_is_diagnosed_in_linear_time() {
+        let mut fixture = String::from(
+            "//- minicore: copy\npub fn banana(v: u32) -> u32 {\n    if v == 0 { 0 }\n",
+        );
+        for arm in 1..5204 {
+            fixture.push_str(&format!("    else if v == {arm} {{ {arm} }}\n"));
+        }
+        fixture.push_str("    else { 5204 }\n}\n");
+        let started = std::time::Instant::now();
+        check_diagnostics(&fixture);
+        let took = started.elapsed();
+        assert!(took < std::time::Duration::from_secs(60), "took {took:?}");
+    }
+
+    // rustc's tests/ui/associated-type-bounds/issue-83017.rs.
+    #[test]
+    fn bound_of_an_associated_type_in_a_for_binds_the_outer_lifetimes() {
+        check_diagnostics(
+            r#"
+//- minicore: sized
+trait TraitA<'a> { type AsA; }
+trait TraitB<'a, 'b> { type AsB; }
+trait TraitC<'a, 'b, 'c> {}
+struct X;
+impl<'a, 'b, 'c> TraitC<'a, 'b, 'c> for X {}
+struct Y;
+impl<'a, 'b> TraitB<'a, 'b> for Y { type AsB = X; }
+struct Z;
+impl<'a> TraitA<'a> for Z { type AsA = Y; }
+fn foo<T>()
+where
+    for<'a> T: TraitA<'a, AsA: for<'b> TraitB<'a, 'b, AsB: for<'c> TraitC<'a, 'b, 'c>>>,
+{
+}
+fn main() {
+    foo::<Z>();
+}
+"#,
+        );
+    }
+
+    // rustc's tests/ui/dyn-compatibility/multiple-supers-should-work.rs.
+    #[test]
+    fn a_trait_object_keeps_projections_that_become_the_same() {
+        check_diagnostics(
+            r#"
+//- minicore: sized, unsize, coerce_unsized, dispatch_from_dyn
+trait Sup<T> { type Assoc; }
+impl<T> Sup<T> for () { type Assoc = T; }
+trait Trait<A, B>: Sup<A, Assoc = A> + Sup<B, Assoc = B> {}
+impl<T, U> Trait<T, U> for () {}
+fn main() {
+    let x: &dyn Trait<(), _> = &();
+    let _y: &dyn Trait<_, ()> = x;
+}
+"#,
+        );
+    }
+
+    // rustc's tests/ui/traits/trait-upcasting/higher-ranked-upcasting-ok.rs.
+    #[test]
+    fn upcasting_a_higher_ranked_trait_object() {
+        check_diagnostics(
+            r#"
+//- minicore: sized, unsize, coerce_unsized, dispatch_from_dyn
+trait Supertrait<'a, 'b> {}
+trait Subtrait<'a, 'b>: Supertrait<'a, 'b> {}
+impl Supertrait<'_, '_> for () {}
+impl Subtrait<'_, '_> for () {}
+fn ok(x: &dyn for<'a, 'b> Subtrait<'a, 'b>) -> &dyn for<'a> Supertrait<'a, 'a> {
+    x
+}
+fn main() {
+    ok(&());
+}
+"#,
+        );
+    }
+
+    #[test]
     fn unit_expression_initializes_its_place() {
         check_diagnostics(
             r#"

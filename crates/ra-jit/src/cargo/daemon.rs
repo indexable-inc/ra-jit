@@ -37,6 +37,10 @@ const IDLE: Duration = Duration::from_secs(1800);
 /// How often the daemon looks for what is idle.
 const TICK: Duration = Duration::from_secs(1);
 
+/// How many checkers the daemon keeps loaded, each of another build: a check for several
+/// targets, or checks of several workspaces in turn.
+const CHECKERS: usize = 4;
+
 /// The share of the machine's memory the workers may hold when `RA_JIT_MEMORY_MAX` does not
 /// say: one part in this many.
 const MEMORY_SHARE: u64 = 2;
@@ -120,7 +124,7 @@ const LAST_LINES: usize = 12;
 pub(crate) const ENDS_WITH_INPUT: &str = "RA_JIT_ENDS_WITH_INPUT";
 
 /// Where a worker that listens at `socket` leaves the errors it found in the source as it
-/// loaded the workspace, as rustc writes them, before it ends.
+/// loaded the workspace, in JSON, before it ends.
 pub(crate) fn errors_beside(socket: &Path) -> PathBuf {
     socket.with_file_name("errors")
 }
@@ -181,10 +185,9 @@ pub(crate) enum Reply {
         spans: Vec<crate::trace::Span>,
     },
     Warming,
-    /// What the checker of a [`Request::Check`] found: no error, or the errors as rustc
-    /// writes them.
+    /// What the checker of a [`Request::Check`] found: no error, or the errors.
     Checked {
-        errors: Option<String>,
+        errors: Option<crate::errors::Said>,
     },
     Status(Status),
     Stopping,
@@ -193,8 +196,8 @@ pub(crate) enum Reply {
 /// Why the worker did not build a program.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub(crate) enum NotBuilt {
-    /// The source has an error, as rustc writes it: the build fails with it.
-    Error(String),
+    /// The source has errors: the build fails with them.
+    Error(crate::errors::Said),
     /// The daemon failed.
     Failed(String),
     /// ra-jit does not build the source as it is, and cargo does.
@@ -203,8 +206,10 @@ pub(crate) enum NotBuilt {
 
 impl NotBuilt {
     pub(crate) fn why(self) -> String {
-        let (NotBuilt::Error(why) | NotBuilt::Failed(why) | NotBuilt::Cargos(why)) = self;
-        why
+        match self {
+            NotBuilt::Error(said) => said.to_string(),
+            NotBuilt::Failed(why) | NotBuilt::Cargos(why) => why,
+        }
     }
 
     /// What the worker's reply other than `ok` says.
@@ -213,7 +218,7 @@ impl NotBuilt {
             return NotBuilt::Cargos(why.to_owned());
         }
         match reply.strip_prefix("error: ") {
-            Some(said) => NotBuilt::Error(ra_jit_live::format::unescape(said)),
+            Some(said) => NotBuilt::Error(crate::errors::Said::of_reply(said)),
             None => NotBuilt::Failed(reply.to_owned()),
         }
     }
@@ -363,9 +368,9 @@ enum Warmth {
     Ready,
     /// Why the worker has no part in the checkout as cargo last built it.
     Failed(String, SystemTime),
-    /// The errors in the source the worker found loading it or building it first, as rustc
-    /// writes them: each program's build fails with them until a source is written.
-    Broken(String, SystemTime),
+    /// The errors in the source the worker found loading it or building it first: each
+    /// program's build fails with them until a source is written.
+    Broken(crate::errors::Said, SystemTime),
 }
 
 impl Warmth {
@@ -566,8 +571,11 @@ impl Worker {
         let warmth = match self.warmed(checkout) {
             Ok(None) => Warmth::Ready,
             Ok(Some(said)) => Warmth::Broken(said, SystemTime::now()),
-            Err(why) => match std::fs::read_to_string(errors_beside(&self.socket)) {
-                Ok(said) if self.ended().is_some() => Warmth::Broken(said, SystemTime::now()),
+            Err(why) => match std::fs::read(errors_beside(&self.socket)) {
+                Ok(said) if self.ended().is_some() => match serde_json::from_slice(&said) {
+                    Ok(said) => Warmth::Broken(said, SystemTime::now()),
+                    Err(_) => Warmth::Failed(format!("{why:#}"), SystemTime::now()),
+                },
                 _ => Warmth::Failed(format!("{why:#}"), SystemTime::now()),
             },
         };
@@ -583,7 +591,7 @@ impl Worker {
     }
 
     /// The errors in the source, when the worker found any.
-    fn warmed(&self, checkout: &Checkout) -> anyhow::Result<Option<String>> {
+    fn warmed(&self, checkout: &Checkout) -> anyhow::Result<Option<crate::errors::Said>> {
         self.connected()?;
         // A source written since cargo built is the daemon's like any edit: it compiles
         // every function and static of the workspace from what it reads. The program the
@@ -919,8 +927,9 @@ struct Daemon {
     ahead: Mutex<FxHashMap<String, Spare>>,
     /// How many spare workers were started: each has a directory of its own.
     spares: AtomicUsize,
-    /// The checker of the last [`Request::Check`], loaded for the next one.
-    checker: Mutex<Option<Checker>>,
+    /// The checkers of the last [`Request::Check`]s, each of another build and loaded for
+    /// the next check of it: a check for several targets asks one for each.
+    checkers: Mutex<Vec<Checker>>,
     asked: Mutex<Instant>,
 }
 
@@ -1011,7 +1020,7 @@ pub(crate) fn serve() -> anyhow::Result<()> {
         spare_when,
         ahead: Mutex::default(),
         spares: AtomicUsize::new(0),
-        checker: Mutex::default(),
+        checkers: Mutex::default(),
         asked: Mutex::new(Instant::now()),
     });
     // A build starts the daemon, and is given this one.
@@ -1048,6 +1057,8 @@ impl Daemon {
         // with every key typed. The worker answers as to `cargo ra-jit build`.
         if line.starts_with("edit\t") {
             let reply = self.edit(&line).unwrap_or_else(|why| format!("error: {why:#}"));
+            // An editor's client reads the errors as text.
+            let reply = crate::errors::Said::text_of_reply(&reply);
             return Ok((&stream).write_all(format!("{}\n", reply.replace('\n', " ")).as_bytes())?);
         }
         let envelope = serde_json::from_str::<Envelope>(&line);
@@ -1140,7 +1151,7 @@ impl Daemon {
                 workers: lock(&self.workers)
                     .values()
                     .map(|it| it.status())
-                    .chain(lock(&self.checker).as_mut().map(Checker::status))
+                    .chain(lock(&self.checkers).iter_mut().map(Checker::status))
                     .collect(),
             }),
             Request::Stop => Reply::Stopping,
@@ -1310,11 +1321,14 @@ impl Daemon {
                 keep
             });
             // One that is checking holds the lock, and is not idle.
-            if let Ok(mut checker) = self.checker.try_lock()
-                && checker.as_ref().is_some_and(|it| it.asked.elapsed() >= idle)
-                && let Some(mut idle) = checker.take()
-            {
-                idle.stop();
+            if let Ok(mut checkers) = self.checkers.try_lock() {
+                checkers.retain_mut(|it| {
+                    let keep = it.asked.elapsed() < idle;
+                    if !keep {
+                        it.stop();
+                    }
+                    keep
+                });
             }
         }
     }
@@ -1340,42 +1354,48 @@ impl Daemon {
         }
     }
 
-    /// Has the checker of `ahead` say what it finds in the source, started when the one
-    /// there is of another build or ended, and started again when it can only take the
-    /// source in by loading it again.
+    /// Has the checker of `ahead` say what it finds in the source, started when there is
+    /// none of its build or it ended, and started again when it can only take the source in
+    /// by loading it again. The one asked longest ago makes way for it when there are
+    /// [`CHECKERS`].
     fn check(&self, ahead: &Ahead) -> Reply {
         let id = ahead.config.id();
-        let mut held = lock(&self.checker);
-        for _ in 0..2 {
-            if let Some(mut other) = held.take_if(|it| it.id != id || it.ended().is_some()) {
-                other.stop();
+        let mut held = lock(&self.checkers);
+        held.retain_mut(|it| {
+            let ended = it.ended().is_some();
+            if ended {
+                it.stop();
             }
-            let checker = match held.as_mut() {
-                Some(checker) => checker,
+            !ended
+        });
+        for _ in 0..2 {
+            let at = match held.iter().position(|it| it.id == id) {
+                Some(at) => at,
                 None => {
+                    if held.len() >= CHECKERS
+                        && let Some(oldest) = (0..held.len()).min_by_key(|&at| held[at].asked)
+                    {
+                        held.remove(oldest).stop();
+                    }
                     let dir = self.home.join("checkers").join(&id);
                     match Checker::start(ahead, &id, &dir) {
-                        Ok(checker) => held.insert(checker),
+                        Ok(checker) => held.push(checker),
                         Err(why) => return Reply::Cold { reason: format!("{why:#}") },
                     }
+                    held.len() - 1
                 }
             };
+            let checker = &mut held[at];
             checker.asked = Instant::now();
             match checker.ask() {
                 Ok(reply) if reply == "ok" => return Reply::Checked { errors: None },
-                Ok(reply) if reply == crate::check::RELOAD => {
-                    if let Some(mut old) = held.take() {
-                        old.stop();
-                    }
-                }
+                Ok(reply) if reply == crate::check::RELOAD => held.remove(at).stop(),
                 Ok(reply) => match NotBuilt::of(&reply) {
                     NotBuilt::Error(said) => return Reply::Checked { errors: Some(said) },
                     why => return Reply::Cold { reason: why.why() },
                 },
                 Err(why) => {
-                    if let Some(mut gone) = held.take() {
-                        gone.stop();
-                    }
+                    held.remove(at).stop();
                     return Reply::Cold { reason: format!("{why:#}") };
                 }
             }
@@ -1438,7 +1458,7 @@ impl Daemon {
         if let Some(spare) = spare.as_mut() {
             spare.stop();
         }
-        if let Some(checker) = lock(&self.checker).as_mut() {
+        for checker in lock(&self.checkers).iter_mut() {
             checker.stop();
         }
         for spare in ahead.values_mut() {

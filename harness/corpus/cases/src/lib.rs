@@ -8219,6 +8219,54 @@ pub mod elided_captures {
     }
 }
 
+/// Destructuring assignments read every part of what they destructure before they assign any,
+/// and move out of a place only what the pattern takes, as rustc's desugaring to a `let` does.
+pub mod destructuring_assignment {
+    use std::cell::RefCell;
+
+    pub struct Loud<'a>(pub u32, pub &'a RefCell<Vec<u32>>);
+
+    impl Drop for Loud<'_> {
+        fn drop(&mut self) {
+            self.1.borrow_mut().push(self.0);
+        }
+    }
+
+    pub struct Pair<'a> {
+        pub kept: Loud<'a>,
+        pub taken: Loud<'a>,
+        pub n: u32,
+    }
+
+    fn index(log: &RefCell<Vec<u32>>, at: usize) -> usize {
+        log.borrow_mut().push(100 + at as u32);
+        at
+    }
+
+    pub fn run() -> ((u32, u32), [u32; 3], u32, Vec<u32>) {
+        let mut t = (1, 2);
+        (t.1, t.0) = t;
+        let mut a = [10, 20, 30];
+        [a[2], a[0], a[1]] = a;
+        let log = RefCell::new(Vec::new());
+        let mut pair = Pair { kept: Loud(1, &log), taken: Loud(2, &log), n: 7 };
+        let mut taken = Loud(3, &log);
+        let mut n = 0;
+        log.borrow_mut().push(taken.0 + n);
+        Pair { taken, n, .. } = pair;
+        log.borrow_mut().push(taken.0 + 10 * n);
+        pair.taken = Loud(4, &log);
+        let r = &mut pair;
+        (r.n, _) = (r.kept.0 + 40, ());
+        let mut slots = [0; 3];
+        (slots[index(&log, 2)], slots[index(&log, 0)]) = (5, 6);
+        let n = pair.n + slots[0] + slots[2];
+        drop(pair);
+        drop(taken);
+        (t, a, n, log.into_inner())
+    }
+}
+
 /// What `for<'a>` bounds prove for any lifetime, which the borrow checker proves for
 /// placeholders: an owned type deserialized from a borrow, a forwarding impl through
 /// `&mut F`, a closure for any lifetime, a collection borrowed for any lifetime and a function

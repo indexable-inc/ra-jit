@@ -292,6 +292,18 @@ impl<L: Language> SyntaxNode<L> {
         self.raw.flat_node_at_range(range, kind).map(|it| it.map(SyntaxNode::from))
     }
 
+    /// The first node of `kind` at `range` that stepping down from this node by
+    /// [`Self::child_or_token_at_range`] finds. In a flat tree it is found from the bottom
+    /// up, in steps as many as the nodes around the range that are no larger than it, rather
+    /// than as many as it is deep below this node.
+    pub fn descendant_at_range(&self, range: TextRange, kind: L::Kind) -> Option<SyntaxNode<L>> {
+        if let Some(found) = self.flat_node_at_range(range, L::kind_to_raw(kind)) {
+            return found;
+        }
+        iter::successors(Some(self.clone()), |it| it.child_or_token_at_range(range)?.into_node())
+            .find(|it| it.text_range() == range && it.kind() == kind)
+    }
+
     /// Returns an independent copy of the subtree rooted at this node.
     ///
     /// The parent of the returned node will be `None`, the start offset will be

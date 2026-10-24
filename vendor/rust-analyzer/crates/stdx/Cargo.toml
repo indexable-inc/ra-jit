@@ -21,6 +21,9 @@ tracing.workspace = true
 crossbeam-utils = "0.8.21"
 # Think twice before adding anything here
 
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+stacker = "0.1.17"
+
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
 

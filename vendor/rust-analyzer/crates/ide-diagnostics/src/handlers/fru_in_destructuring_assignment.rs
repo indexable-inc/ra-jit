@@ -24,6 +24,7 @@ mod tests {
     fn spread_variable() {
         check_diagnostics(
             r#"
+//- minicore: copy
 struct Foo { bar: u32, baz: u32 }
 fn test(f: Foo, g: Foo, mut bar: u32, mut baz: u32) {
     Foo { ..g } = f;

@@ -136,18 +136,19 @@ impl<'db> rustc_type_ir::relate::Relate<DbInterner<'db>> for BoundExistentialPre
         a: Self,
         b: Self,
     ) -> rustc_type_ir::relate::RelateResult<DbInterner<'db>, Self> {
-        // We need to perform this deduplication as we sometimes generate duplicate projections in `a`.
+        // Not deduplicated, as rustc no longer does since #136458: `dyn Trait<A, B>` with
+        // `trait Trait<A, B>: Sup<A, Assoc = A> + Sup<B, Assoc = B>` keeps both projections,
+        // which are one twice once `A` and `B` are inferred to be the same, and one is still
+        // related to each of the other's.
         let mut a_v: Vec<_> = a.into_iter().collect();
         let mut b_v: Vec<_> = b.into_iter().collect();
         // `skip_binder` here is okay because `stable_cmp` doesn't look at binders
         a_v.sort_by(|a, b| {
             stable_cmp_existential_predicate(a.as_ref().skip_binder(), b.as_ref().skip_binder())
         });
-        a_v.dedup();
         b_v.sort_by(|a, b| {
             stable_cmp_existential_predicate(a.as_ref().skip_binder(), b.as_ref().skip_binder())
         });
-        b_v.dedup();
         if a_v.len() != b_v.len() {
             return Err(TypeError::ExistentialMismatch(ExpectedFound::new(a, b)));
         }

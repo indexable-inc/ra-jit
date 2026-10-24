@@ -114,7 +114,7 @@ fn main(s: module::Struct) {
     fn private_but_shadowed_in_deref() {
         check_diagnostics(
             r#"
-//- minicore: deref
+//- minicore: deref, copy
 mod module {
     pub struct Struct { field: Inner }
     pub struct Inner { pub field: u32 }

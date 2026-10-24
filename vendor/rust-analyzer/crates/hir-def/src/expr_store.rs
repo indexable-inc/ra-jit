@@ -807,7 +807,13 @@ impl ExpressionStore {
         self.expr_only.as_ref()?.binding_owners.get(&id).copied()
     }
 
-    pub fn visit_expr_children(&self, expr_id: ExprId, mut visitor: impl StoreVisitor) {
+    pub fn visit_expr_children(&self, expr_id: ExprId, visitor: impl StoreVisitor) {
+        // A walk of the expressions recurses through here, once for each that is in another:
+        // rustc's 5,204-arm `else if`.
+        stdx::ensure_sufficient_stack(|| self.visit_expr_children_here(expr_id, visitor))
+    }
+
+    fn visit_expr_children_here(&self, expr_id: ExprId, mut visitor: impl StoreVisitor) {
         // Do not use `..` patterns or field accesses here, only destructuring, to ensure we cover all cases
         // (we've had multiple bugs with this in the past).
         match &self[expr_id] {

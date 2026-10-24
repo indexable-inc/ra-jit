@@ -25,6 +25,21 @@ pub const fn is_ci() -> bool {
     option_env!("CI").is_some()
 }
 
+/// Runs `f` with at least 100 KiB of stack left, on a new 1 MiB segment if this one has less,
+/// as rustc's `ensure_sufficient_stack` does: that of `rustc_type_ir` does nothing outside
+/// rustc. What recurses once per level of what it walks, the trait solver or the lowering of
+/// an expression, goes as deep as the source does, and an unoptimized build overflows a 2 MB
+/// thread long before rustc's 5,204-arm `else if` is through.
+#[cfg(not(target_family = "wasm"))]
+pub fn ensure_sufficient_stack<R>(f: impl FnOnce() -> R) -> R {
+    stacker::maybe_grow(100 * 1024, 1024 * 1024, f)
+}
+
+#[cfg(target_family = "wasm")]
+pub fn ensure_sufficient_stack<R>(f: impl FnOnce() -> R) -> R {
+    f()
+}
+
 pub fn hash_once<Hasher: std::hash::Hasher + Default>(thing: impl std::hash::Hash) -> u64 {
     std::hash::BuildHasher::hash_one(&std::hash::BuildHasherDefault::<Hasher>::default(), thing)
 }

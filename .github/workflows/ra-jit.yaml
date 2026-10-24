@@ -150,7 +150,9 @@ jobs:
       tier: full
 
   # vendor/rust-analyzer as the fork has it, built and tested outside this repository, so that
-  # the subtree cannot come to depend on crates/ (docs/architecture-split.md, step 5).
+  # the subtree cannot come to depend on crates/ (docs/architecture-split.md, step 5). The
+  # tests of ide-diagnostics are the verdict's (the daemon's errors are its diagnostics), and
+  # add about 15 s to the job.
   fork:
     name: fork alone
     needs: changes
@@ -166,7 +168,7 @@ jobs:
           workspaces: ${{ runner.temp }}/rust-analyzer
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - working-directory: ${{ runner.temp }}/rust-analyzer
-        run: cargo test -p hir-ty -p hir-ty-borrowck -p hir-ty-wfcheck && cargo check -p hir
+        run: cargo test -p hir-ty -p hir-ty-borrowck -p hir-ty-wfcheck -p ide-diagnostics && cargo check -p hir
 
   ci:
     name: ci

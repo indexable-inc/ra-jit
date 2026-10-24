@@ -167,7 +167,8 @@ pub(crate) struct Flags {
     pub(crate) manifest_path: Option<PathBuf>,
     pub(crate) packages: Vec<String>,
     pub(crate) workspace: bool,
-    pub(crate) excludes: bool,
+    /// The packages `--exclude` leaves out of `--workspace`.
+    pub(crate) excludes: Vec<String>,
     pub(crate) features: Vec<String>,
     pub(crate) all_features: bool,
     pub(crate) no_default_features: bool,
@@ -176,8 +177,12 @@ pub(crate) struct Flags {
     pub(crate) targets: Vec<String>,
     pub(crate) bin: Option<String>,
     pub(crate) example: Option<String>,
-    pub(crate) message_format: bool,
-    pub(crate) unstable: bool,
+    /// The values of `--message-format`, as typed.
+    pub(crate) message_format: Vec<String>,
+    /// `--build-plan` or `--unit-graph`: what cargo would do, which only cargo says.
+    pub(crate) cargos_plan: bool,
+    /// The values of `-Z`.
+    pub(crate) unstable: Vec<String>,
     pub(crate) quiet: bool,
     pub(crate) no_run: bool,
     pub(crate) no_fail_fast: bool,
@@ -308,13 +313,17 @@ impl Invocation {
         Some(surroundings.to_owned())
     }
 
-    /// Why what was typed is cargo's alone, wherever it is typed.
+    /// Why what was typed is cargo's alone, wherever it is typed. A check links nothing,
+    /// and says what the daemon finds of the source whatever the flags are, but what cargo
+    /// would do.
     fn asks_for_cargo(&self) -> Option<String> {
         let flags = &self.flags;
         let reason = match () {
-            _ if flags.message_format => "--message-format is cargo's to answer",
-            _ if flags.unstable => "unstable cargo flags",
-            _ if flags.excludes => "--exclude is not loaded by the daemon yet",
+            _ if flags.cargos_plan => "--build-plan and --unit-graph are cargo's to answer",
+            _ if self.subcommand == Subcommand::Check => return None,
+            _ if !flags.message_format.is_empty() => "--message-format is cargo's to answer",
+            _ if !flags.unstable.is_empty() => "unstable cargo flags",
+            _ if !flags.excludes.is_empty() => "--exclude is not loaded by the daemon yet",
             _ if flags.targets.len() > 1 => "several targets in one build",
             _ => return self.target().and_then(|it| unsupported_target(&it)),
         };
@@ -337,6 +346,8 @@ impl Invocation {
             all_features: self.flags.all_features,
             packages: self.flags.packages.clone(),
             workspace: self.flags.workspace,
+            excludes: self.flags.excludes.clone(),
+            unstable: self.flags.unstable.clone(),
             target: self.target(),
             dev_deps: self.subcommand == Subcommand::Test || self.flags.dev_targets,
             config: self.flags.config.clone(),
@@ -360,7 +371,7 @@ impl Flags {
             "--manifest-path" => self.manifest_path = value.map(PathBuf::from),
             "-p" | "--package" => self.packages.extend(owned()),
             "--workspace" | "--all" => self.workspace = true,
-            "--exclude" => self.excludes = true,
+            "--exclude" => self.excludes.extend(owned()),
             "-F" | "--features" => {
                 let features = value.unwrap_or_default().split([',', ' ']);
                 self.features.extend(features.filter(|it| !it.is_empty()).map(str::to_owned));
@@ -373,8 +384,9 @@ impl Flags {
             "--target" => self.targets.extend(owned()),
             "--bin" => self.bin = owned(),
             "--example" => self.example = owned(),
-            "--message-format" | "--build-plan" | "--unit-graph" => self.message_format = true,
-            "-Z" => self.unstable = true,
+            "--message-format" => self.message_format.extend(owned()),
+            "--build-plan" | "--unit-graph" => self.cargos_plan = true,
+            "-Z" => self.unstable.extend(owned()),
             "-q" | "--quiet" => self.quiet = true,
             "--no-run" => self.no_run = true,
             "--no-fail-fast" => self.no_fail_fast = true,
@@ -477,9 +489,17 @@ mod tests {
         assert_eq!(Asked::parse(vec!["doc".to_owned()]), Asked::Cargo(vec!["doc".to_owned()]));
         assert_eq!(Asked::parse(Vec::new()), Asked::Help);
         assert_eq!(Asked::parse(vec!["--help".to_owned()]), Asked::Help);
-        for args in ["--message-format json", "--exclude a", "--target mips-unknown-none"] {
+        for args in ["--message-format json", "--exclude a", "--target mips-unknown-none", "-Zx"] {
             assert!(build("build", args).asks_for_cargo().is_some(), "{args}");
+            assert_eq!(build("check", args).asks_for_cargo(), None, "{args}");
         }
+        assert_eq!(build("check", "--target a --target b").asks_for_cargo(), None);
+        assert!(build("check", "--unit-graph").asks_for_cargo().is_some());
+        let check =
+            build("check", "--workspace --exclude a --exclude=b -Zx -Z y --message-format=json");
+        assert_eq!(check.flags.excludes, ["a", "b"]);
+        assert_eq!(check.flags.unstable, ["x", "y"]);
+        assert_eq!(check.flags.message_format, ["json"]);
         for args in
             ["--release", "--profile bench", "-p a -p b", "--all-features", "--no-default-features"]
         {

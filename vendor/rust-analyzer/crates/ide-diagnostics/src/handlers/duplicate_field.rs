@@ -86,6 +86,7 @@ fn main() {
     fn duplicate_field_in_struct_pattern() {
         check_diagnostics(
             r#"
+//- minicore: copy
 struct S { foo: i32, bar: i32 }
 fn f(s: S) {
     let S {
@@ -105,6 +106,7 @@ fn f(s: S) {
     fn duplicate_field_in_enum_variant_pattern() {
         check_diagnostics(
             r#"
+//- minicore: copy
 enum E { V { foo: i32, bar: i32 } }
 fn f(e: E) {
     match e {

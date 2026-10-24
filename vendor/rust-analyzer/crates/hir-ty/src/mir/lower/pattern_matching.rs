@@ -11,9 +11,10 @@ use crate::{
     mir::{
         CastKind, FieldIndex, LocalId, MutBorrowKind, Operand, OperandKind, Place, Projection,
         lower::{
-            BasicBlockId, BinOp, BindingId, BorrowKind, Expr, Idx, MemoryMap, MirLowerCtx,
-            MirLowerError, MirSpan, Pat, PatId, PlaceElem, ProjectionElem, ResolveValueResult,
-            Result, Rvalue, SwitchTargets, TerminatorKind, Ty, TyKind, ValueNs, VariantId,
+            AssignTarget, Assigned, BasicBlockId, BinOp, BindingId, BorrowKind, Expr, Idx,
+            MemoryMap, MirLowerCtx, MirLowerError, MirSpan, Pat, PatId, PlaceElem, ProjectionElem,
+            ResolveValueResult, Result, Rvalue, SwitchTargets, TerminatorKind, Ty, TyKind, ValueNs,
+            VariantId,
         },
     },
 };
@@ -232,11 +233,51 @@ impl<'db> MirLowerCtx<'_, 'db> {
         &mut self,
         current: BasicBlockId,
         value: Place<'db>,
+        value_span: MirSpan,
         pattern: PatId,
     ) -> Result<'db, BasicBlockId> {
-        let (current, _) =
-            self.pattern_match_inner(current, None, value, pattern, MatchingMode::Assign)?;
+        // Every part is read before any is assigned, so that `(t.1, t.0) = t` swaps.
+        let outer = std::mem::take(&mut self.assigned);
+        let outer_from = std::mem::replace(&mut self.assigned_from, value_span);
+        let matched = self.pattern_match_inner(current, None, value, pattern, MatchingMode::Assign);
+        let assigned = std::mem::replace(&mut self.assigned, outer);
+        self.assigned_from = outer_from;
+        let (mut current, _) = matched?;
+        for Assigned { target, part, span } in assigned {
+            let (place, ty) = match target {
+                AssignTarget::Local(local) => (local.into(), self.result.locals[local].ty.as_ref()),
+                AssignTarget::Place(expr) => {
+                    let Some((place, next)) =
+                        self.lower_expr_as_place_without_adjust(current, expr, false)?
+                    else {
+                        continue;
+                    };
+                    current = next;
+                    (place, self.expr_ty_without_adjust(expr))
+                }
+            };
+            let value: Rvalue =
+                Operand { kind: OperandKind::Move(Place::from(part).store()), span: None }.into();
+            current = self.drop_assigned(place, ty, current, span, Some(value.clone()));
+            self.push_assignment(current, place, value, span);
+        }
         Ok(current)
+    }
+
+    /// Reads `value`, a part of what a destructuring assignment destructures, into a
+    /// temporary of `ty`, for `target` to be assigned from once every part is read.
+    fn read_assigned(
+        &mut self,
+        current: BasicBlockId,
+        target: AssignTarget,
+        ty: Ty<'db>,
+        value: Rvalue,
+        span: MirSpan,
+    ) -> Result<'db, ()> {
+        let part = self.temp(ty, current, span)?;
+        self.push_assignment(current, part.into(), value, self.assigned_from);
+        self.assigned.push(Assigned { target, part, span });
+        Ok(())
     }
 
     pub(super) fn match_self_param(
@@ -566,20 +607,8 @@ impl<'db> MirLowerCtx<'_, 'db> {
                         let ty = self.result.locals[local].ty.as_ref();
                         let value =
                             Operand { kind: OperandKind::Copy(cond_place.store()), span: None };
-                        current = self.drop_assigned(
-                            local.into(),
-                            ty,
-                            current,
-                            pattern.into(),
-                            Some(value.into()),
-                        );
-                        self.push_match_assignment(
-                            current,
-                            local,
-                            BindingMode(ByRef::No, rustc_ast_ir::Mutability::Not),
-                            cond_place,
-                            pattern.into(),
-                        );
+                        let target = AssignTarget::Local(local);
+                        self.read_assigned(current, target, ty, value.into(), pattern.into())?;
                         return Ok((current, current_else));
                     }
 
@@ -693,16 +722,9 @@ impl<'db> MirLowerCtx<'_, 'db> {
                     mode == MatchingMode::Assign,
                     "Pat::Expr can only come in destructuring assignments"
                 );
-                let Some((lhs_place, current)) =
-                    self.lower_expr_as_place_without_adjust(current, expr, false)?
-                else {
-                    return Ok((current, current_else));
-                };
                 let ty = self.expr_ty_without_adjust(expr);
                 let value = self.assigned_part(expr, cond_place)?;
-                let current =
-                    self.drop_assigned(lhs_place, ty, current, expr.into(), Some(value.clone()));
-                self.push_assignment(current, lhs_place, value, expr.into());
+                self.read_assigned(current, AssignTarget::Place(expr), ty, value, expr.into())?;
                 (current, current_else)
             }
             &Pat::Box { inner } => {

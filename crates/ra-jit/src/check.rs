@@ -36,7 +36,9 @@ pub(crate) fn serve(args: Args) -> anyhow::Result<()> {
         crate::load(&projects, &cargo_config, crate::load_config(), selection, None, None)?;
     ide_db::base_db::set_process_env(&mut db, crate::process::own());
     let Parts { root, members, lints_capped, .. } = checkouts.parts(&args.project)?;
-    let mut checker = Checker::new(&db, &vfs, &checkouts, &members, read_from, root, lints_capped);
+    let excludes = &args.selection.excludes;
+    let mut checker =
+        Checker::new(&db, &vfs, &checkouts, &members, excludes, read_from, root, lints_capped);
     let served = match crate::socket::Served::bind(&socket) {
         Ok(served) => served,
         Err(crate::socket::NotServed::Taken) => {
@@ -86,11 +88,13 @@ struct Checker {
 }
 
 impl Checker {
+    #[expect(clippy::too_many_arguments)]
     fn new(
         db: &RootDatabase,
         vfs: &Vfs,
         checkouts: &crate::Checkouts,
         members: &FxHashSet<ide_db::base_db::Crate>,
+        excludes: &[String],
         read_from: SystemTime,
         root: PathBuf,
         lints_capped: bool,
@@ -104,6 +108,8 @@ impl Checker {
             })
             .collect();
         let mut ran_roots = FxHashSet::default();
+        // The crates of a package `--exclude` names are not checked.
+        let mut excluded_roots = FxHashSet::default();
         let mut manifests = FxHashMap::default();
         for workspace in checkouts.loaded.workspaces() {
             let ProjectWorkspaceKind::Cargo { cargo, .. } = &workspace.kind else { continue };
@@ -113,8 +119,12 @@ impl Checker {
             }
             for package in cargo.packages().filter(|it| cargo[*it].is_local) {
                 manifests.insert(cargo[package].manifest.to_path_buf().into(), None);
+                let excluded = excludes.contains(&cargo[package].name);
                 for &target in &cargo[package].targets {
                     let target = &cargo[target];
+                    if excluded {
+                        excluded_roots.insert(PathBuf::from(target.root.clone()));
+                    }
                     let runs = matches!(
                         target.kind,
                         TargetKind::BuildScript | TargetKind::Lib { is_proc_macro: true }
@@ -140,6 +150,9 @@ impl Checker {
                     continue;
                 }
                 let root_file = krate.root_file(db);
+                if path_of(root_file).is_some_and(|it| excluded_roots.contains(&it)) {
+                    continue;
+                }
                 let runs = path_of(root_file).is_some_and(|it| ran_roots.contains(&it));
                 let mut of_it: Vec<vfs::FileId> = krate
                     .modules(db)

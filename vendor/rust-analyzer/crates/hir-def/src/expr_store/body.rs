@@ -117,12 +117,10 @@ impl Body {
         debug_assert_eq!(Some(start), Self::anchor_offset(db, def));
         let to = |ptr: SyntaxNodePtr| {
             let range = ptr.text_range() + start;
-            std::iter::successors(Some(anchor.clone()), |it| {
-                it.child_or_token_at_range(range)?.into_node()
-            })
-            .find(|it| it.text_range() == range && it.kind() == ptr.kind())
-            .map(|it| SyntaxNodePtr::new(&it))
-            .expect("no node where the body has one")
+            anchor
+                .descendant_at_range(range, ptr.kind())
+                .map(|it| SyntaxNodePtr::new(&it))
+                .expect("no node where the body has one")
         };
         let mv = Move { file: syntax.file_id, to: &to };
         let source_map = BodySourceMap {

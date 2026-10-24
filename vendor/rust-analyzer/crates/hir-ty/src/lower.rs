@@ -272,6 +272,9 @@ pub struct TyLoweringContext<'db, 'a> {
     is_lowering_impl_trait_bounds: bool,
     bound_vars: Vec<(Vec<Name>, BoundVarKinds<'db>)>,
     elisions: Vec<Elision<'db>>,
+    /// The next bound lowered is one on an associated type, `X: for<'b> B<'a, 'b>` in
+    /// `for<'a> T: A<'a, X: for<'b> B<'a, 'b>>`, whose `for` adds to the enclosing binder.
+    bound_of_assoc_ty: bool,
     lifetime_lowering_mode: LifetimeLoweringMode,
 }
 
@@ -317,6 +320,7 @@ impl<'db, 'a> TyLoweringContext<'db, 'a> {
             is_lowering_impl_trait_bounds: false,
             bound_vars,
             elisions: Vec::new(),
+            bound_of_assoc_ty: false,
             lifetime_lowering_mode,
         }
     }
@@ -1202,7 +1206,28 @@ impl<'db, 'a> TyLoweringContext<'db, 'a> {
             }
         };
 
+        let of_assoc_ty = mem::take(&mut self.bound_of_assoc_ty);
         match bound {
+            // As rustc, `for<'a> T: A<'a, X: for<'b> B<'a, 'b>>` bounds `X` with
+            // `for<'a, 'b> <T as A<'a>>::X: B<'a, 'b>`: a binder of its own would leave `'a`
+            // escaping. The variables a level binds come before those left out of it, so a
+            // level that already has one of those keeps the binder of its own.
+            &TypeBound::ForLifetime(ref binder, path)
+                if of_assoc_ty
+                    && self.bound_vars_with_elided().len() == self.peek_bound_vars().len() =>
+            {
+                let generic_def = self.generic_def;
+                let top = self.bound_vars.last_mut().unwrap();
+                let (names, kinds) = (top.0.len(), top.1);
+                top.0.extend(binder.iter().cloned());
+                top.1 = BoundVarKinds::new_from_iter(kinds.iter().chain(binder.iter().map(|_| {
+                    BoundVariableKind::Region(BoundRegionKind::Named(generic_def.into()))
+                })));
+                self.with_elision(false, |ctx| lower_path_bound(ctx, path));
+                let top = self.bound_vars.last_mut().unwrap();
+                top.0.truncate(names);
+                top.1 = kinds;
+            }
             &TypeBound::ForLifetime(ref binder, path) => {
                 self.with_shifted_in(binder, |ctx| {
                     ctx.with_elision(false, |ctx| lower_path_bound(ctx, path))

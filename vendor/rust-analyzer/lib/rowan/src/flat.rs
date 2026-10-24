@@ -166,13 +166,23 @@ impl FlatTree {
         (next < self.end(parent)).then_some(next)
     }
 
-    /// The child of `parent` that `at` is in.
+    /// The child of `parent` that `at` is in. Up from `at` is as many steps as `at` is deep
+    /// below `parent`, which an `else if` chain makes as many as it has arms, and across
+    /// `parent`'s children as many as come before it, which a long block makes many: a step
+    /// of each at a time takes the fewer.
     #[inline]
-    fn child_containing(&self, parent: u32, mut at: u32) -> u32 {
-        while let Some(up) = self.parent(at).filter(|&it| it != parent) {
-            at = up;
+    fn child_containing(&self, parent: u32, at: u32) -> u32 {
+        let (mut up, mut across) = (at, parent + 1);
+        loop {
+            match self.parent(up) {
+                Some(it) if it != parent => up = it,
+                _ => return up,
+            }
+            if at < self.end(across) {
+                return across;
+            }
+            across = self.end(across);
         }
-        at
     }
 
     #[inline]
@@ -533,23 +543,21 @@ mod tests {
                                     describe(Some(g.covering_element(at))),
                                     describe(Some(f.covering_element(at)))
                                 );
-                                if g.parent().is_none() {
-                                    for kind in (0..5).chain(100..105).map(SyntaxKind) {
-                                        let stepped = |root: &SyntaxNode| {
-                                            std::iter::successors(Some(root.clone()), |it| {
-                                                it.child_or_token_at_range(at)?.into_node()
-                                            })
-                                            .find(|it| it.text_range() == at && it.kind() == kind)
-                                        };
-                                        let found = f
-                                            .flat_node_at_range(at, kind)
-                                            .unwrap_or_else(|| stepped(f));
-                                        assert_eq!(
-                                            stepped(g).map(|it| describe(Some(it.into()))),
-                                            found.map(|it| describe(Some(it.into()))),
-                                            "seed {seed}, {kind:?} at {at:?}"
-                                        );
-                                    }
+                                for kind in (0..5).chain(100..105).map(SyntaxKind) {
+                                    let stepped = |from: &SyntaxNode| {
+                                        std::iter::successors(Some(from.clone()), |it| {
+                                            it.child_or_token_at_range(at)?.into_node()
+                                        })
+                                        .find(|it| it.text_range() == at && it.kind() == kind)
+                                    };
+                                    let found = f
+                                        .flat_node_at_range(at, kind)
+                                        .unwrap_or_else(|| stepped(f));
+                                    assert_eq!(
+                                        stepped(g).map(|it| describe(Some(it.into()))),
+                                        found.map(|it| describe(Some(it.into()))),
+                                        "seed {seed}, {kind:?} at {at:?}"
+                                    );
                                 }
                             }
                             let offset = TextSize::from(start);

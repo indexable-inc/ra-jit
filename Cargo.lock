@@ -1802,7 +1802,6 @@ dependencies = [
  "serde_derive",
  "smallvec",
  "span",
- "stacker",
  "stdx",
  "syntax",
  "thin-vec",
@@ -3884,6 +3883,7 @@ dependencies = [
  "jod-thread",
  "libc",
  "miow",
+ "stacker",
  "tracing",
  "windows-sys 0.61.2",
 ]

@@ -56,9 +56,6 @@ syntax.workspace = true
 span.workspace = true
 thin-vec = "0.2.16"
 
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
-stacker = "0.1.17"
-
 [features]
 in-rust-tree = ["hir-expand/in-rust-tree"]
 

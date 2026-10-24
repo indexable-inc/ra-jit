@@ -7,6 +7,7 @@ pub(crate) mod wrapper;
 mod ancestor;
 mod cli;
 mod client;
+mod messages;
 pub(crate) mod own_script;
 mod package;
 pub(crate) mod plan;
@@ -222,8 +223,8 @@ fn build(asked: &Invocation) -> anyhow::Result<i32> {
             held = Some(settled);
             state
         }
-        Ok(Err(NotServed::Error(said))) => {
-            eprintln!("{said}");
+        Ok(Err(NotServed::Error(_, written))) => {
+            eprintln!("{written}");
             return Ok(FAILED);
         }
         Ok(Err(NotServed::Cargo(ToCargo(state, reason)))) => {
@@ -272,15 +273,28 @@ const FAILED: i32 = 101;
 
 /// `cargo ra-jit check`: what the daemon says of the source as it builds the programs of
 /// the build with the same flags, when it has that build loaded. Any other check is the
-/// daemon's checker's, which loads the workspace as that build would and builds nothing.
-/// Neither runs rustc on the source.
+/// daemon's checker's, which loads the workspace as that build would and builds nothing,
+/// once for each target asked for. Neither runs rustc on the source. The verdict is written
+/// as `--message-format` asks: in cargo's JSON, it is what an editor shows.
 fn check(asked: &Invocation) -> anyhow::Result<i32> {
+    let format = match messages::Format::of(&asked.flags.message_format) {
+        Ok(format) => format,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return Ok(1);
+        }
+    };
     let started = Instant::now();
     let cwd = std::env::current_dir()?;
     let finished = |profile: &str| {
         let took = started.elapsed().as_secs_f64();
         let finished = format!("`{profile}` profile [ra-jit] target(s) in {took:.2}s");
         say::status(asked.flags.quiet, "Finished", &finished);
+        messages::passed(format);
+    };
+    let turned_down = |said: &[crate::errors::Said]| -> anyhow::Result<i32> {
+        messages::turned_down(format, said, &state::metadata(asked)?);
+        Ok(FAILED)
     };
     if let Ok(state) = State::read(&asked.key(&cwd))
         && !state.programs.is_empty()
@@ -291,30 +305,35 @@ fn check(asked: &Invocation) -> anyhow::Result<i32> {
                 state.write()?;
                 return Ok(0);
             }
-            Err(NotServed::Error(said)) => {
-                eprintln!("{said}");
-                return Ok(FAILED);
-            }
+            Err(NotServed::Error(said, _)) => return turned_down(&[said]),
             Err(NotServed::Cargo(_)) => {}
         }
     }
     let ahead = state::checked(asked)?;
     let profile = ahead.config.selection.profile.clone();
-    match client::ask(Request::Check(ahead), Start::IfMissing)? {
-        Some(daemon::Reply::Checked { errors: None }) => {
-            finished(&profile);
-            Ok(0)
+    let targets = match &asked.flags.targets[..] {
+        [_, _, ..] => asked.flags.targets.iter().cloned().map(Some).collect(),
+        _ => vec![ahead.config.selection.target.clone()],
+    };
+    let mut said = Vec::new();
+    for target in targets {
+        let mut ahead = ahead.clone();
+        ahead.config.selection.target = target;
+        match client::ask(Request::Check(ahead), Start::IfMissing)? {
+            Some(daemon::Reply::Checked { errors: None }) => {}
+            Some(daemon::Reply::Checked { errors: Some(errors) }) => said.push(errors),
+            Some(daemon::Reply::Cold { reason }) => {
+                eprintln!("error: ra-jit could not check the workspace: {reason}");
+                return Ok(FAILED);
+            }
+            reply => anyhow::bail!("the daemon answered a check with {reply:?}"),
         }
-        Some(daemon::Reply::Checked { errors: Some(said) }) => {
-            eprintln!("{said}");
-            Ok(FAILED)
-        }
-        Some(daemon::Reply::Cold { reason }) => {
-            eprintln!("error: ra-jit could not check the workspace: {reason}");
-            Ok(FAILED)
-        }
-        reply => anyhow::bail!("the daemon answered a check with {reply:?}"),
     }
+    if said.is_empty() {
+        finished(&profile);
+        return Ok(0);
+    }
+    turned_down(&said)
 }
 
 /// Why the first build of a workspace is not rustc's of what the workspace depends on and
@@ -419,8 +438,8 @@ struct ToCargo(Box<State>, String);
 /// Why the daemon's programs are not the build.
 enum NotServed {
     Cargo(ToCargo),
-    /// The source has an error, written as rustc and cargo write it.
-    Error(String),
+    /// The source has errors: them, and them as rustc and cargo write them.
+    Error(crate::errors::Said, String),
 }
 
 /// Has the daemon bring the programs of `state` up to date and puts them where cargo has
@@ -440,7 +459,10 @@ fn by_daemon(mut state: State) -> Result<(State, Held), NotServed> {
     // not build otherwise, cargo does.
     let answers = match state.checkouts.iter().map(built).collect::<Result<Vec<_>, _>>() {
         Ok(answers) => answers,
-        Err(NotBuilt::Error(said)) => return Err(NotServed::Error(state.turned_down(&said))),
+        Err(NotBuilt::Error(said)) => {
+            let written = state.turned_down(&said);
+            return Err(NotServed::Error(said, written));
+        }
         Err(why) => return Err(to_cargo(state, why.why())),
     };
     let settling = Instant::now();

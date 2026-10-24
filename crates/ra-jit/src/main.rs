@@ -249,6 +249,7 @@ impl Args {
         let mut all_features = false;
         let mut profile = None;
         let mut config = Vec::new();
+        let (mut excludes, mut unstable) = (Vec::new(), Vec::new());
         let mut asked_in = None;
         let mut also = Vec::new();
         let mut target = None;
@@ -294,6 +295,8 @@ impl Args {
                 "--no-default-features" => no_default_features = true,
                 "--package" | "-p" => packages.push(value()?),
                 "--workspace" => workspace = true,
+                "--exclude" => excludes.push(value()?),
+                "-Z" => unstable.push(value()?),
                 "--all-features" => all_features = true,
                 "--release" | "--profile" if profile.is_some() => {
                     bail!("the profile is given twice")
@@ -341,6 +344,8 @@ impl Args {
                 all_features,
                 packages,
                 workspace,
+                excludes,
+                unstable,
                 target,
                 dev_deps: cfg_test || dev_deps,
                 config,
@@ -4919,6 +4924,12 @@ fn selected(args: &Args) -> Vec<String> {
     if selection.workspace {
         selected.push("--workspace".to_owned());
     }
+    for package in &selection.excludes {
+        selected.extend(["--exclude".to_owned(), package.clone()]);
+    }
+    for unstable in &selection.unstable {
+        selected.extend(["-Z".to_owned(), unstable.clone()]);
+    }
     for config in &selection.config {
         selected.extend(["--config".to_owned(), config.clone()]);
     }
@@ -4974,9 +4985,9 @@ struct Sources {
 
 /// Why the daemon did not build a program.
 enum Refused {
-    /// The source has an error, written as rustc writes it: the build fails with it, as
-    /// rustc's would, and no rustc runs to say it again.
-    Error(String),
+    /// The source has errors: the build fails with them, as rustc's would, and no rustc runs
+    /// to say them again.
+    Error(errors::Said),
     /// The source is one ra-jit does not build as it is, or ra-jit failed to: cargo builds it.
     Cargos(String),
 }
@@ -4985,11 +4996,7 @@ impl Refused {
     /// The line that tells a client.
     fn reply(&self) -> String {
         match self {
-            Refused::Error(why) => {
-                let mut line = "error: ".to_owned();
-                ra_jit_live::format::escape(why, &mut line);
-                line
-            }
+            Refused::Error(said) => said.reply(),
             Refused::Cargos(why) => format!("cargo: {}", why.replace('\n', " ")),
         }
     }
@@ -4997,8 +5004,10 @@ impl Refused {
 
 impl std::fmt::Display for Refused {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (Refused::Error(why) | Refused::Cargos(why)) = self;
-        f.write_str(why)
+        match self {
+            Refused::Error(said) => said.fmt(f),
+            Refused::Cargos(why) => f.write_str(why),
+        }
     }
 }
 
@@ -5010,11 +5019,11 @@ fn refusal(
     sources: &[vfs::FileId],
     watched: &Sources,
     root: &Path,
-    broken: Option<String>,
+    broken: Option<errors::Said>,
     out_of_date: Option<hir_ty_codegen::OutOfDate>,
 ) -> Option<Refused> {
     if let Some(unparsed) = unparsed(db, sources, watched, root) {
-        return Some(Refused::Error(unparsed));
+        return Some(Refused::Error(errors::Said::one(unparsed)));
     }
     if let Some(broken) = broken {
         return Some(Refused::Error(broken));
@@ -5038,7 +5047,8 @@ fn refusal(
     // that ra-jit takes for wrong is ra-jit's to fix, and not for rustc to build.
     if does_not_compile(&why) && !left_from_the_start {
         let message = format!("{name} has an error ra-jit cannot say more of: {why}");
-        return Some(Refused::Error(written_at(db, func, watched, root, &message)));
+        let said = errors::Said::one(written_at(db, func, watched, root, &message));
+        return Some(Refused::Error(said));
     }
     Some(Refused::Cargos(format!(
         "{name} is not compiled by ra-jit and rustc's copy is from before the edit: {why}"
@@ -5079,7 +5089,7 @@ fn written_at(
     watched: &Sources,
     root: &Path,
     message: &str,
-) -> String {
+) -> errors::Diagnostic {
     let at = func.and_then(|func| hir::HasSource::source(hir::Function::from(func), db)).and_then(
         |source| {
             let name = source.value.name()?;
@@ -5108,7 +5118,7 @@ fn unparsed(
     sources: &[vfs::FileId],
     watched: &Sources,
     root: &Path,
-) -> Option<String> {
+) -> Option<errors::Diagnostic> {
     let Sources { paths } = watched;
     for &file in sources {
         let path = paths.get(&file);
@@ -5185,8 +5195,8 @@ const DENIED: &[&str] = &[
 /// The lints of [`DENIED`]'s kind that the borrow checker gives, off with its errors.
 const DENIED_BORROWCK: &[&str] = &["unused_mut"];
 
-/// The errors written in the edited files, as rust-analyzer finds them, as rustc writes them
-/// with paths from `root`. Nothing may reach them, so the build never looks at them.
+/// The errors written in the edited files, as rust-analyzer finds them, with paths from
+/// `root` as rustc's are. Nothing may reach them, so the build never looks at them.
 fn broken_in(
     db: &RootDatabase,
     edited: &[vfs::FileId],
@@ -5194,7 +5204,7 @@ fn broken_in(
     root: &Path,
     within: Option<Arc<FxHashSet<ide_db::base_db::Crate>>>,
     lints: bool,
-) -> Option<String> {
+) -> Option<errors::Said> {
     let threads = std::thread::available_parallelism().map_or(1, |it| it.get());
     let config = ide_diagnostics::DiagnosticsConfig::test_sample();
     let refuse_borrowck = std::env::var_os("RA_JIT_BORROWCK_REFUSE").is_none_or(|it| it != "0");
@@ -5241,7 +5251,7 @@ fn broken_in(
         return None;
     }
     found.sort_by_key(|(at, ..)| (at.file_id, at.range.start()));
-    let said: Vec<_> = found
+    let said = found
         .iter()
         .map(|(at, code, message)| {
             let text = db.file_text(at.file_id).text(db);
@@ -5254,7 +5264,7 @@ fn broken_in(
             errors::at(code, message, &path, text, at.range)
         })
         .collect();
-    Some(said.join("\n\n"))
+    Some(errors::Said(said))
 }
 
 /// The text of the source file at `path` as the database has it.
@@ -5471,9 +5481,9 @@ fn build_batch(db: &RootDatabase, args: Args) -> anyhow::Result<()> {
 
 /// Leaves `said`, the errors in the source a worker found as it loaded the workspace, for
 /// the daemon to fail each build with.
-fn errors_for_the_daemon(args: &Args, said: &str) -> anyhow::Result<()> {
+fn errors_for_the_daemon(args: &Args, said: &errors::Said) -> anyhow::Result<()> {
     if let Some(socket) = &args.socket {
-        std::fs::write(cargo::daemon::errors_beside(socket), said)?;
+        std::fs::write(cargo::daemon::errors_beside(socket), serde_json::to_string(said)?)?;
     }
     Ok(())
 }
@@ -7429,7 +7439,7 @@ fn run_holding(
                 cold = build_unheld(&db, &table, &args, &mut known, &listed)?;
             }
             if let Some(unset) = &cold.unset {
-                errors_for_the_daemon(&args, &errors::of_none(unset))?;
+                errors_for_the_daemon(&args, &errors::Said::one(errors::of_none(unset)))?;
                 bail!("{unset}");
             }
             eprint!("cold: ");
@@ -9032,8 +9042,10 @@ impl Program {
         let hold = || unparsed(db, &edited, paths, &args.checkout).is_some() || broken.is_some();
         let held = |known: &Rejections| {
             let why = refusal(db, &edited, paths, &args.checkout, broken.clone(), None);
-            let why = why
-                .unwrap_or_else(|| Refused::Error(errors::of_none("the source does not compile")));
+            let why = why.unwrap_or_else(|| {
+                let said = errors::of_none("the source does not compile");
+                Refused::Error(errors::Said::one(said))
+            });
             eprintln!(
                 "edit (apply {apply:.1?}): not built: no patch, and the source does not compile; \
                  the next edit is a patch of the last build"
@@ -9081,7 +9093,10 @@ impl Program {
         let mut failed = unnamed
             .map(Refused::Cargos)
             .or_else(|| refusal(db, &edited, paths, &args.checkout, broken, out_of_date))
-            .or_else(|| warm.unset.as_deref().map(|it| Refused::Error(errors::of_none(it))));
+            .or_else(|| {
+                let unset = warm.unset.as_deref()?;
+                Some(Refused::Error(errors::Said::one(errors::of_none(unset))))
+            });
         let refused = start.elapsed();
         failed = failed.or_else(|| stale_copies(db, table, args).map(Refused::Cargos));
         let copies = start.elapsed();

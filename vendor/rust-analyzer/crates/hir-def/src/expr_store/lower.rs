@@ -1450,6 +1450,11 @@ impl<'db> ExprCollector<'db> {
 
     /// Returns `None` if and only if the expression is `#[cfg]`d out.
     fn maybe_collect_expr(&mut self, expr: ast::Expr) -> Option<ExprId> {
+        // An expression is lowered within the one it is in: rustc's 5,204-arm `else if`.
+        stdx::ensure_sufficient_stack(|| self.maybe_collect_expr_here(expr))
+    }
+
+    fn maybe_collect_expr_here(&mut self, expr: ast::Expr) -> Option<ExprId> {
         if !self.check_cfg(&expr) {
             return None;
         }

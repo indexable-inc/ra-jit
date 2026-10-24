@@ -3014,8 +3014,8 @@ impl<'db> Builder<'_, '_, 'db> {
                 let unless_auto = |it: &rustc_type_ir::Binder<_, _>| {
                     !matches!(it.skip_binder(), rustc_type_ir::ExistentialPredicate::AutoTrait(_))
                 };
-                for (x, y) in pa.iter().filter(unless_auto).zip(pb.iter().filter(unless_auto)) {
-                    let (x, y) = (x.skip_binder(), y.skip_binder());
+                for (bound, y) in pa.iter().filter(unless_auto).zip(pb.iter().filter(unless_auto)) {
+                    let (x, y) = (bound.skip_binder(), y.skip_binder());
                     match (x, y) {
                         (
                             rustc_type_ir::ExistentialPredicate::Trait(x),
@@ -3025,15 +3025,16 @@ impl<'db> Builder<'_, '_, 'db> {
                         }
                         // An upcast, `dyn Foo<'static>` to `dyn Bar<'static, 'a>` with
                         // `trait Foo<'a>: Bar<'a, 'a>`: the supertrait as the source's
-                        // arguments instantiate it is the target's.
+                        // arguments instantiate it is the target's. A supertrait whose
+                        // arguments the source's own `for<'a>` binds is left out: it
+                        // constrains no region of the body.
                         (
                             rustc_type_ir::ExistentialPredicate::Trait(x),
                             rustc_type_ir::ExistentialPredicate::Trait(y),
                         ) => {
                             let interner = self.interner();
-                            let source = rustc_type_ir::Binder::dummy(
-                                x.with_self_ty(interner, Ty::new_unit(interner)),
-                            );
+                            let source =
+                                bound.rebind(x.with_self_ty(interner, Ty::new_unit(interner)));
                             let found = rustc_type_ir::elaborate::supertraits(interner, source)
                                 .find(|it| it.def_id() == y.def_id)
                                 .and_then(|it| it.no_bound_vars());

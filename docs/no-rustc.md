@@ -116,8 +116,9 @@ all of it:
   each unit cargo asks for it writes the files cargo expects to find (the names
   `--print file-names` gave, and the dep-info), compiled through the daemon.
 - **What goes to cargo today** (`Invocation::only_cargo` in `cargo/cli.rs`: `--message-format`,
-  `-Z`, `--exclude`, several targets, an unknown triple) becomes supported, or refused with the
-  reason. None of it goes to cargo.
+  `-Z`, `--exclude`, several targets, an unknown triple, of a build; of a check only
+  `--build-plan` and `--unit-graph`) becomes supported, or refused with the reason. None of it
+  goes to cargo.
 
 Subcommands ra-jit does not claim (`cargo ra-jit doc`, `clippy`, `fmt`, `publish`) are passed
 to cargo as typed today. Producing HTML documentation and running clippy's lints are not
@@ -199,8 +200,8 @@ Paths are under `crates/`; line numbers are of 41e7906192.
 | Where | What it does | When |
 |---|---|---|
 | `ra-jit/src/cargo/mod.rs:305` `by_daemon`, `:300` `ToCargo`, `:395` `by_cargo` | sends the whole build to cargo | the source has an error (until D's first part: now it fails the build with ra-jit's error); rustc's copy of a refused function is stale; a build script's or proc macro's source changed; a manifest changed; the daemon did not build a program |
-| `ra-jit/src/cargo/cli.rs:297` `only_cargo` | sends the command to cargo untouched | `--message-format`, `-Z`, `--exclude`, several targets, an unknown triple |
-| `ra-jit/src/cargo/mod.rs:139` `plain_cargo` | runs cargo with nothing of ra-jit's but its answers to cargo's questions (since B) | subcommands ra-jit does not claim, and a check `only_cargo` sends to cargo (until 2026-10-23, every `cargo ra-jit check`) |
+| `ra-jit/src/cargo/cli.rs:297` `only_cargo` | sends the command to cargo untouched | of a build `--message-format`, `-Z`, `--exclude`, several targets, an unknown triple; of a check `--build-plan` and `--unit-graph` |
+| `ra-jit/src/cargo/mod.rs:139` `plain_cargo` | runs cargo with nothing of ra-jit's but its answers to cargo's questions (since B) | subcommands ra-jit does not claim, and a check with `--build-plan` or `--unit-graph` (until 2026-10-23, every `cargo ra-jit check`; until 2026-10-24, one with `--message-format`, `-Z`, `--exclude` or several targets) |
 
 **What rustc compiled, linked into ra-jit's programs** (steps E, F, G)
 

@@ -1057,6 +1057,7 @@ impl<'a, 'b, 'db> PathLoweringContext<'a, 'b, 'db> {
                     })
                 }
                 for bound in binding.bounds.iter() {
+                    self.ctx.bound_of_assoc_ty = true;
                     predicates.extend(
                         self.ctx
                             .lower_type_bound(

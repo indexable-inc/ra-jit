@@ -523,6 +523,7 @@ fn g() {
     fn tuple_struct_pat() {
         check_diagnostics(
             r#"
+//- minicore: copy
 struct S(u32, u32);
 fn f(
     S(a, b, c): S,

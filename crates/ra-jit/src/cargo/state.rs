@@ -662,9 +662,9 @@ impl State {
 
     /// `said`, the errors the daemon found in the source, ended as cargo ends a build rustc
     /// turned down: with the program the build is of.
-    pub(crate) fn turned_down(&self, said: &str) -> String {
+    pub(crate) fn turned_down(&self, said: &crate::errors::Said) -> String {
         let Some(program) = self.programs.iter().find(|it| it.asked_as.is_some()) else {
-            return said.to_owned();
+            return said.to_string();
         };
         let name = &program.name;
         let target = match (program.kind, program.test) {
@@ -676,12 +676,16 @@ impl State {
             (Kind::Test, _) => format!("test \"{name}\""),
             (Kind::Bench, _) => format!("bench \"{name}\""),
         };
-        let errors = match crate::errors::count(said) {
+        let errors = match said.count() {
             0 | 1 => "1 previous error".to_owned(),
             n => format!("{n} previous errors"),
         };
         let package = &program.package;
-        format!("{said}\n\nerror: could not compile `{package}` ({target}) due to {errors}")
+        let mut notes = said.notes().join("\n");
+        if !notes.is_empty() {
+            notes.push('\n');
+        }
+        format!("{said}\n\n{notes}error: could not compile `{package}` ({target}) due to {errors}")
     }
 
     /// Counts a build that went to cargo.
@@ -1124,7 +1128,7 @@ fn rustc_path() -> OsString {
     beside.filter(|it| it.is_file()).map_or_else(|| "rustc".into(), PathBuf::into_os_string)
 }
 
-fn metadata(asked: &Invocation) -> anyhow::Result<Metadata> {
+pub(super) fn metadata(asked: &Invocation) -> anyhow::Result<Metadata> {
     let mut command = MetadataCommand::new();
     command.cargo_path(cargo_path()).no_deps();
     if let Some(manifest) = &asked.flags.manifest_path {

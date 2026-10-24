@@ -138,7 +138,7 @@ mod tests {
     fn missing_unsafe_diagnostic_with_raw_ptr() {
         check_diagnostics(
             r#"
-//- minicore: sized
+//- minicore: sized, copy
 fn main() {
     let x = &5_usize as *const usize;
     unsafe { let _y = *x; }
@@ -152,7 +152,7 @@ fn main() {
     fn missing_unsafe_diagnostic_with_unsafe_call() {
         check_diagnostics(
             r#"
-//- minicore: sized
+//- minicore: sized, copy
 struct HasUnsafe;
 
 impl HasUnsafe {
@@ -294,7 +294,7 @@ fn main() {
     fn add_unsafe_block_when_dereferencing_a_raw_pointer() {
         check_fix(
             r#"
-//- minicore: sized
+//- minicore: sized, copy
 fn main() {
     let x = &5_usize as *const usize;
     let _z = *x$0;
@@ -338,7 +338,7 @@ fn main() {
     fn add_unsafe_block_when_calling_unsafe_method() {
         check_fix(
             r#"
-//- minicore: sized
+//- minicore: sized, copy
 struct S(usize);
 impl S {
     unsafe fn func(&self) {
@@ -424,7 +424,7 @@ fn main() {
     fn raw_deref_on_union_field() {
         check_diagnostics(
             r#"
-//- minicore: index, slice
+//- minicore: index, slice, copy
 
 fn main() {
 
@@ -806,6 +806,7 @@ fn main() {
     fn no_unsafe_diagnostic_when_destructuring_union_with_wildcard() {
         check_diagnostics(
             r#"
+//- minicore: copy
 union Union { field: i32 }
 fn foo(v: &Union) {
     let Union { field: _ } = v;
@@ -820,7 +821,7 @@ fn foo(v: &Union) {
     fn union_destructuring() {
         check_diagnostics(
             r#"
-//- minicore: fn
+//- minicore: fn, copy
 union Union { field: u8 }
 fn foo(v @ Union { field: _field }: &Union) {
                        // ^^^^^^ error: access to union field is unsafe and requires an unsafe function or block
@@ -851,6 +852,7 @@ fn foo(v @ Union { field: _field }: &Union) {
     fn union_field_access() {
         check_diagnostics(
             r#"
+//- minicore: copy
 union Union { field: u8 }
 fn foo(v: &Union) {
     v.field;
@@ -888,6 +890,7 @@ unsafe fn foo(Union { field: _field }: Union) {}
     fn union_assignment_allowed() {
         check_diagnostics(
             r#"
+//- minicore: copy
 union Union { field: u32 }
 fn foo(mut v: Union) {
     v.field = 123;
@@ -909,8 +912,10 @@ fn bar(mut v: Union2) {
     fn raw_ref_reborrow_is_safe() {
         check_diagnostics(
             r#"
+//- minicore: copy
 fn main() {
-    let ptr: *mut i32;
+    let mut local = 1;
+    let ptr: *mut i32 = &raw mut local;
     let _addr = &raw const *ptr;
 
     let local = 1;

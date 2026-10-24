@@ -104,7 +104,15 @@ pub fn borrowck<'db>(db: &'db dyn HirDatabase, def: DefWithBodyId) -> BorrowckRe
     }
     let owner = InferBodyId::DefWithBodyId(def);
     let infer = InferenceResult::of(db, owner);
-    if infer.has_type_mismatches() || infer.is_erroneous() {
+    if infer.has_type_mismatches() || infer.is_erroneous() || !infer.diagnostics().is_empty() {
+        return result;
+    }
+    // rustc borrow checks no body its lowering or type check found an error in, which an
+    // error of either taints: a cast that is not one, `..base` in a destructuring assignment.
+    let (_, source_map) = hir_def::expr_store::Body::with_source_map(db, def);
+    if source_map.diagnostics().iter().any(|it| {
+        !matches!(it, hir_def::expr_store::ExpressionStoreDiagnostics::InactiveCode { .. })
+    }) {
         return result;
     }
     // A `static` of a type that is not `Sized` is rustc's E0277, which keeps it from being

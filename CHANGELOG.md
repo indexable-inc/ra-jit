@@ -12,6 +12,18 @@ All notable changes to ra-jit are written here. The format follows
   `.sd` and AVX's 256-bit ones give a lane of all ones where the immediate's predicate holds, as
   rustc's do. glam's `Vec4::cmpeq` and `is_finite_mask`, which bevy calls, were left to rustc;
   `harness/breakers` checks each predicate, NaN lanes included, against rustc's program.
+- `cargo ra-jit check --message-format=json` (and `short`, `json-diagnostic-short`,
+  `json-diagnostic-rendered-ansi`, `json-render-diagnostics`) writes the daemon's verdict as
+  `cargo check` does: each error a `compiler-message` with rustc's code, level, spans (bytes,
+  lines, columns counted as rustc counts them, the source lines and their highlights) and
+  `rendered`, cargo's package id and target, the failure notes, `build-finished` and the
+  `could not compile` lines. rust-analyzer's check-on-save and editors read it, so they show
+  ra-jit's verdict and not rustc's. `-Z`, `--exclude` and several `--target`s are the
+  checker's too (a checker for each target, four held at once), where they went to cargo.
+  `harness/check_json.py` compares it with `cargo check` on the same errors: 7 packages, every
+  format, every compared field the same; the labels, help and notes, other spans and
+  `code.explanation` are rustc's only, and the messages are rust-analyzer's wording.
+
 - `RA_JIT_UNITS=1` compiles a whole program's functions many to an LLVM module, as rustc
   compiles a crate's codegen units (#176): the functions are found from their IR before any
   is compiled, cut into units of about 20,000 instructions in the order they were found in,
@@ -442,6 +454,27 @@ All notable changes to ra-jit are written here. The format follows
   under nushell): a lane the mask leaves out is not read or written (corpus `crypto_lanes`).
 
 ### Fixed
+
+- The borrow checker no longer panics on rustc's UI tests (`lints_ui.py --deny unused_mut`
+  over all 20,450 files: 4 panics before, none now, and ra-jit's time from 67 s to 14 s). The
+  causes were in the trait solver and the lowering it reads: a trait object's projections
+  that become the same after substitution were deduplicated before being related, so
+  `dyn A<X = T> + B<X = T>` failed to relate to itself (rustc relates them all, #136458); the
+  `for<'b>` of an associated type's bound in a `for<'a>` was lowered as a binder of its own
+  instead of concatenated onto the outer one, as rustc does; and upcasting a higher-ranked
+  trait object built its supertraits outside the source's binder. Each has a regression test
+  in ide-diagnostics, which panicked as rustc's test did before the fix.
+- A 5,204-arm `else if` chain (rustc's `expr-stack-overflow.rs`, #206) is borrow checked in
+  4.5 s, where it took over 300 s and then overflowed the stack: finding each expression's
+  syntax walked down from the body's root, quadratic in the chain, and lowering, inference
+  and MIR building recursed once an arm. The walk now goes to the child that contains the
+  range, and the recursions grow their stack as rustc's `ensure_sufficient_stack` does
+  (`stdx::ensure_sufficient_stack`). 1,000 arms take 2.2 s (5.35 s before), 2,000 arms 2.5 s
+  (26 s); ide-diagnostics tests the 5,204-arm chain under 60 s.
+- A destructuring assignment that moves out of a reference (`S { b, .. } = *r`) is an error
+  at `*r`, as rustc reports it, and one that copies is not an error.
+- ide-diagnostics's 24 failing tests pass (756 pass, 1 ignored), and CI's fast tier runs them
+  in the fork job.
 
 - A function the daemon compiles ahead, while it reads the symbols rustc built, is given up on
   once they are read, where the worker used to finish it before it was ready. bevy's second

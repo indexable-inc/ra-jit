@@ -979,7 +979,6 @@ dependencies = [
  "serde_derive",
  "smallvec",
  "span",
- "stacker",
  "stdx",
  "syntax",
  "thin-vec",
@@ -996,13 +995,16 @@ version = "0.0.0"
 dependencies = [
  "base-db",
  "hir-def",
+ "hir-expand",
  "hir-ty",
+ "hir-ty-wfcheck",
  "la-arena 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ra-ap-rustc_ast_ir",
  "ra-ap-rustc_type_ir",
  "rustc-hash 2.1.2",
  "salsa",
  "smallvec",
+ "syntax",
 ]
 
 [[package]]
@@ -2774,6 +2776,7 @@ dependencies = [
  "jod-thread",
  "libc",
  "miow",
+ "stacker",
  "tracing",
  "windows-sys 0.61.2",
 ]

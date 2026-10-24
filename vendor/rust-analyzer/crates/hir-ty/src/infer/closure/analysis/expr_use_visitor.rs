@@ -498,8 +498,13 @@ impl<'a, 'db, D: Delegate<'db>> ExprUseVisitor<'a, 'db, D> {
         Ok(())
     }
 
-    #[instrument(skip(self), level = "debug")]
     pub(crate) fn walk_expr(&mut self, expr: ExprId) -> Result {
+        // An expression is walked within the one it is in: rustc's 5,204-arm `else if`.
+        crate::next_solver::ensure_sufficient_stack(|| self.walk_expr_here(expr))
+    }
+
+    #[instrument(skip(self), level = "debug")]
+    fn walk_expr_here(&mut self, expr: ExprId) -> Result {
         self.walk_adjustment(expr)?;
 
         match self.cx.store[expr] {
